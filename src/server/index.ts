@@ -6,6 +6,9 @@
  */
 
 import { createHash } from 'node:crypto';
+import { resolve, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import type {
   TypeManifest,
@@ -13,10 +16,38 @@ import type {
   EndpointDefinition,
   HttpMethod,
   TypeOwlServerConfig,
+  TypeOwlServerPluginConfig,
   PropertyDefinition,
   TypeFileReference,
-  TypeDomain
+  TypeDomain,
+  TypeOwlRequestContext,
+  TypeOwlGuardConfig,
+  TypeOwlHandler,
+  TypeOwlResponse
 } from '../types.js';
+
+// Re-export types and config helper
+export { defineServerConfig } from '../types.js';
+export type { 
+  TypeOwlServerPluginConfig, 
+  TypeOwlGuardConfig,
+  TypeOwlHandler,
+  TypeOwlRequestContext,
+  TypeOwlResponse
+} from '../types.js';
+
+// Re-export extraction utilities
+export { 
+  extractTypes, 
+  extractFromFile, 
+  extractTypesAsRecord,
+  type ExtractedType,
+  type ExtractOptions,
+  type ExtractedTypes
+} from './extract.js';
+
+// Import for internal use
+import { extractTypes as extractTypesSync } from './extract.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🏗️ TYPE REGISTRY
@@ -32,16 +63,43 @@ export class TypeRegistry {
   /** Generated type file cache (domain -> { content, hash }) */
   private typeFileCache: Map<string, { content: string; hash: string }> = new Map();
   /** Config */
-  private config: Required<TypeOwlServerConfig>;
+  private config: Required<Omit<TypeOwlServerConfig, 'typeSources'>> & { typeSources: string[] };
+  /** Plugin config (when created from config file) */
+  private pluginConfig?: TypeOwlServerPluginConfig;
 
   constructor(config: TypeOwlServerConfig = {}) {
+    // Normalize typeSources to array of absolute paths
+    const typeSources = config.typeSources 
+      ? (Array.isArray(config.typeSources) ? config.typeSources : [config.typeSources])
+          .map(p => resolve(process.cwd(), p))
+      : [];
+    
     this.config = {
       basePath: config.basePath ?? '/__typeowl',
       version: config.version ?? '0.0.0',
-      includeGitCommit: config.includeGitCommit ?? false
+      includeGitCommit: config.includeGitCommit ?? false,
+      typeSources
     };
     // Initialize default domain
     this.domains.set('main', { types: {} });
+  }
+
+  /**
+   * Check if a file path is allowed for type extraction
+   */
+  private isAllowedSource(filePath: string): boolean {
+    if (this.config.typeSources.length === 0) {
+      return false; // No sources configured = extraction disabled
+    }
+    
+    const absolutePath = filePath.startsWith('/') 
+      ? filePath 
+      : resolve(process.cwd(), filePath);
+    
+    return this.config.typeSources.some(allowedPath => {
+      // Check if the file is within the allowed path (file or directory)
+      return absolutePath === allowedPath || absolutePath.startsWith(allowedPath + '/');
+    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -104,6 +162,65 @@ export class TypeRegistry {
     }
     
     this.registerTypeInDomain(name, { kind: 'object', properties: props });
+    return this;
+  }
+
+  /**
+   * Extract and register types directly from a TypeScript source file
+   * 
+   * ⚠️ Requires `typeSources` to be configured in createTypeOwl() for security.
+   * 
+   * @example
+   * // Configure allowed sources
+   * const typeowl = createTypeOwl({
+   *   version: '1.0.0',
+   *   typeSources: './src/types.ts'  // or ['./src/types/', './src/models/']
+   * });
+   * 
+   * // In your types.ts file:
+   * type Blog = { id: string; title: string; content: string; }
+   * interface Product { name: string; price: number; }
+   * 
+   * // Register them directly from the source
+   * typeowl
+   *   .domain('content')
+   *   .extractAndRegister(import.meta.url, ['Blog', 'Product']);
+   * 
+   * @throws Error if file is not in allowed typeSources
+   */
+  extractAndRegister(file: string, typeNames: string[]): this {
+    // Resolve the file path
+    let filePath: string;
+    if (file.startsWith('file://')) {
+      filePath = fileURLToPath(file);
+    } else if (file.startsWith('/')) {
+      filePath = file;
+    } else {
+      filePath = resolve(process.cwd(), file);
+    }
+    
+    // Security check: ensure file is in allowed sources
+    if (!this.isAllowedSource(filePath)) {
+      const configured = this.config.typeSources.length > 0 
+        ? `Allowed sources: ${this.config.typeSources.join(', ')}`
+        : 'No typeSources configured. Set typeSources in createTypeOwl() to enable extraction.';
+      
+      throw new Error(
+        `[TypeOwl] Type extraction not allowed from: ${filePath}\n` +
+        `${configured}\n\n` +
+        `Example:\n` +
+        `  const typeowl = createTypeOwl({\n` +
+        `    typeSources: '${dirname(filePath)}'\n` +
+        `  });`
+      );
+    }
+    
+    const extracted = extractTypesSync({ file: filePath, types: typeNames });
+    
+    for (const type of extracted) {
+      this.registerTypeInDomain(type.name, type.definition);
+    }
+    
     return this;
   }
 
@@ -335,7 +452,7 @@ export class TypeRegistry {
    * Handle an HTTP request for types
    * Returns the response body or null if path doesn't match
    */
-  handleRequest(path: string): { body: unknown; contentType: string } | null {
+  handleRequest(path: string): TypeOwlResponse | null {
     const basePath = this.config.basePath;
     
     // Manifest endpoint
@@ -375,6 +492,161 @@ export class TypeRegistry {
     }
 
     return null;
+  }
+
+  /**
+   * Validate a request against guard configuration
+   * Use this to check API keys, etc. in your framework's middleware
+   */
+  validateRequest(
+    ctx: TypeOwlRequestContext, 
+    guard?: TypeOwlGuardConfig
+  ): { valid: boolean; error?: string } {
+    if (!guard) return { valid: true };
+
+    // Check if enabled
+    if (guard.enabled === false) {
+      return { valid: false, error: 'TypeOwl endpoints are disabled' };
+    }
+    if (guard.enabled === 'development' && process.env.NODE_ENV === 'production') {
+      return { valid: false, error: 'TypeOwl endpoints are disabled in production' };
+    }
+
+    // Check API key if configured
+    if (guard.apiKey) {
+      const headerKey = ctx.headers?.['x-typeowl-key'];
+      const queryKey = ctx.query?.['key'];
+      const providedKey = (Array.isArray(headerKey) ? headerKey[0] : headerKey) || queryKey;
+
+      if (providedKey !== guard.apiKey) {
+        return { valid: false, error: 'Invalid or missing API key' };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Get this registry as a TypeOwlHandler interface
+   * Useful for passing to the plugin config
+   */
+  asHandler(): TypeOwlHandler {
+    return this;
+  }
+
+  /**
+   * Set the plugin configuration (called internally by createTypeOwlFromConfig)
+   */
+  setPluginConfig(config: TypeOwlServerPluginConfig): this {
+    this.pluginConfig = config;
+    return this;
+  }
+
+  /**
+   * Get the plugin configuration
+   */
+  getPluginConfig(): TypeOwlServerPluginConfig | undefined {
+    return this.pluginConfig;
+  }
+
+  /**
+   * Get the serving mode from config.
+   */
+  getMode(): 'dynamic' | 'static' {
+    return this.pluginConfig?.mode ?? 'dynamic';
+  }
+
+  /**
+   * Mount TypeOwl routes to your app.
+   * Uses the registerRoutes function from your config file.
+   * 
+   * @example
+   * const typeowl = await initTypeOwl();
+   * typeowl.mount(app);
+   * 
+   * @throws Error if mode is 'static' or no registerRoutes is defined
+   */
+  async mount(app: unknown): Promise<void> {
+    const mode = this.getMode();
+    
+    if (mode === 'static') {
+      throw new Error(
+        '[TypeOwl] Cannot mount() in static mode.\n' +
+        'Static mode generates files via CLI instead of serving at runtime.\n' +
+        'Change mode to "dynamic" if you want to serve types from your server.'
+      );
+    }
+    
+    if (!this.pluginConfig?.registerRoutes) {
+      throw new Error(
+        '[TypeOwl] No registerRoutes defined in config.\n' +
+        'Dynamic mode requires registerRoutes to be defined.\n\n' +
+        'Add a registerRoutes function to your typeowl.server.config.ts:\n\n' +
+        'export default defineServerConfig({\n' +
+        '  mode: "dynamic",\n' +
+        '  registerRoutes: (app, typeowl, config) => {\n' +
+        '    // Register your routes here\n' +
+        '  },\n' +
+        '});'
+      );
+    }
+
+    await this.pluginConfig.registerRoutes(app, this, this.pluginConfig);
+  }
+
+  /**
+   * Validate config for CLI operations.
+   * 
+   * @internal
+   */
+  validateForCLI(): { valid: boolean; error?: string } {
+    const mode = this.getMode();
+    
+    if (mode === 'dynamic' && !this.pluginConfig?.registerRoutes) {
+      return {
+        valid: false,
+        error: 'Dynamic mode requires registerRoutes to be defined in config.',
+      };
+    }
+    
+    return { valid: true };
+  }
+
+  /**
+   * Generate static type files to disk.
+   * Used internally by CLI - not intended for direct use.
+   * 
+   * @internal
+   */
+  async generate(outputPath: string): Promise<{ files: string[] }> {
+    const outputDir = resolve(process.cwd(), outputPath);
+    const typesDir = join(outputDir, 'types');
+    const generatedFiles: string[] = [];
+    
+    // Create directories
+    mkdirSync(typesDir, { recursive: true });
+    
+    // Write manifest
+    const manifestPath = join(outputDir, 'manifest.json');
+    writeFileSync(manifestPath, JSON.stringify(this.getManifest(), null, 2));
+    generatedFiles.push(manifestPath);
+    
+    // Write type files for each domain
+    for (const domainName of this.getDomains()) {
+      const { content } = this['generateTypeFile'](domainName);
+      const filePath = join(typesDir, `${domainName}.d.ts`);
+      writeFileSync(filePath, content);
+      generatedFiles.push(filePath);
+    }
+    
+    // Write index file
+    const indexPath = join(typesDir, 'index.d.ts');
+    writeFileSync(indexPath, this['generateEndpointsFile']());
+    generatedFiles.push(indexPath);
+    
+    console.log(`  🦉 TypeOwl generated ${generatedFiles.length} files to ${outputDir}`);
+    
+    return { files: generatedFiles };
   }
 }
 
@@ -520,20 +792,122 @@ function typeDefToTSType(def: TypeDefinition): string {
       return def.name;
     case 'optional':
       return `${typeDefToTSType(def.type)} | undefined`;
+    case 'raw':
+      // Raw TypeScript - already valid TS syntax
+      return def.typescript;
     default:
       return 'unknown';
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🚀 FACTORY FUNCTION
+// 🚀 FACTORY FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Create a new TypeOwl registry
+ * Create a new TypeOwl registry (low-level API)
  */
 export function createTypeOwl(config?: TypeOwlServerConfig): TypeRegistry {
   return new TypeRegistry(config);
+}
+
+/**
+ * Create TypeOwl from a server config file (high-level API)
+ * Automatically handles type extraction based on config.
+ * 
+ * @example
+ * // typeowl.server.config.ts
+ * export default defineServerConfig({
+ *   version: '1.0.0',
+ *   typeSources: './src/types/',
+ *   extract: {
+ *     content: { from: './src/types/', types: ['Blog', 'Product'] },
+ *   },
+ * });
+ * 
+ * // server.ts
+ * import config from './typeowl.server.config.js';
+ * const typeowl = createTypeOwlFromConfig(config);
+ */
+export function createTypeOwlFromConfig(config: TypeOwlServerPluginConfig): TypeRegistry {
+  const registry = new TypeRegistry({
+    basePath: config.basePath,
+    version: config.version,
+    includeGitCommit: config.includeGitCommit,
+    typeSources: config.typeSources,
+  });
+  
+  // Store the plugin config for mount() to use
+  registry.setPluginConfig(config);
+  
+  // Auto-register extracted types from config
+  if (config.extract) {
+    for (const [domain, extraction] of Object.entries(config.extract)) {
+      registry
+        .domain(domain)
+        .extractAndRegister(extraction.from, extraction.types);
+    }
+  }
+  
+  return registry;
+}
+
+/**
+ * Load the TypeOwl server config file.
+ * Auto-discovers typeowl.server.config.ts in the project root.
+ * 
+ * @example
+ * import { loadServerConfig, createTypeOwlFromConfig } from 'typeowl/server';
+ * 
+ * const config = await loadServerConfig();
+ * const typeowl = createTypeOwlFromConfig(config);
+ * 
+ * @example
+ * // Or with a custom path
+ * const config = await loadServerConfig('./custom.config.ts');
+ */
+export async function loadServerConfig(
+  configPath?: string
+): Promise<TypeOwlServerPluginConfig> {
+  const path = configPath ?? resolve(process.cwd(), 'typeowl.server.config.ts');
+  
+  try {
+    // Try .ts first, then .js
+    const tsPath = path.endsWith('.ts') ? path : path.replace(/\.js$/, '.ts');
+    const jsPath = path.endsWith('.js') ? path : path.replace(/\.ts$/, '.js');
+    
+    let configModule: { default: TypeOwlServerPluginConfig };
+    
+    try {
+      // Try importing as-is (works with tsx, ts-node, etc.)
+      configModule = await import(tsPath);
+    } catch {
+      // Fall back to .js extension
+      configModule = await import(jsPath);
+    }
+    
+    return configModule.default;
+  } catch (e) {
+    throw new Error(
+      `[TypeOwl] Failed to load config from: ${path}\n` +
+      `Make sure typeowl.server.config.ts exists in your project root.\n` +
+      `${e}`
+    );
+  }
+}
+
+/**
+ * Load config and create TypeOwl in one step.
+ * Auto-discovers typeowl.server.config.ts in the project root.
+ * 
+ * @example
+ * import { initTypeOwl } from 'typeowl/server';
+ * 
+ * const typeowl = await initTypeOwl();
+ */
+export async function initTypeOwl(configPath?: string): Promise<TypeRegistry> {
+  const config = await loadServerConfig(configPath);
+  return createTypeOwlFromConfig(config);
 }
 
 export default createTypeOwl;

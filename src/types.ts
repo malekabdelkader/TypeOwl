@@ -20,7 +20,8 @@ export type TypeDefinition =
   | { kind: 'union'; types: TypeDefinition[] }
   | { kind: 'intersection'; types: TypeDefinition[] }
   | { kind: 'reference'; name: string }  // Reference to another type by name
-  | { kind: 'optional'; type: TypeDefinition };
+  | { kind: 'optional'; type: TypeDefinition }
+  | { kind: 'raw'; typescript: string };  // Raw TypeScript string (extracted from source)
 
 export interface PropertyDefinition {
   type: TypeDefinition;
@@ -93,7 +94,7 @@ export interface TypeDomain {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ⚙️ SERVER CONFIGURATION
+// ⚙️ SERVER CONFIGURATION (Registry)
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface TypeOwlServerConfig {
@@ -103,6 +104,198 @@ export interface TypeOwlServerConfig {
   version?: string;
   /** Include git commit in manifest */
   includeGitCommit?: boolean;
+  /**
+   * Allowed source files/directories for type extraction.
+   * Only files within these paths can be used with extractAndRegister().
+   * 
+   * Can be:
+   * - A single file path: './src/types.ts'
+   * - A directory: './src/types/'
+   * - An array of paths: ['./src/types/', './src/models/']
+   * 
+   * If not set, extraction is disabled for safety.
+   * 
+   * @example
+   * typeSources: './src/types.ts'
+   * 
+   * @example
+   * typeSources: ['./src/types/', './src/models/']
+   */
+  typeSources?: string | string[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔐 SERVER PLUGIN CONFIGURATION (typeowl.server.config.ts)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Guard configuration for TypeOwl endpoints
+ */
+export interface TypeOwlGuardConfig {
+  /**
+   * Enable/disable TypeOwl endpoints
+   * - true: always enabled
+   * - false: always disabled
+   * - 'development': only enabled when NODE_ENV !== 'production'
+   * @default 'development'
+   */
+  enabled?: boolean | 'development';
+  
+  /**
+   * API key required to access type endpoints
+   * If set, requests must include the key via header or query param
+   */
+  apiKey?: string;
+}
+
+/**
+ * Request context passed to the plugin handler
+ */
+export interface TypeOwlRequestContext {
+  /** The request path (e.g., /__typeowl, /__typeowl/types/users.d.ts) */
+  path: string;
+  /** Headers from the request (for API key validation) */
+  headers?: Record<string, string | string[] | undefined>;
+  /** Query parameters (for API key validation) */
+  query?: Record<string, string | undefined>;
+}
+
+/**
+ * Response from handleRequest
+ */
+export interface TypeOwlResponse {
+  body: unknown;
+  contentType: string;
+}
+
+/**
+ * The TypeOwl handler interface - framework agnostic
+ */
+export interface TypeOwlHandler {
+  /** Handle a request and return response or null if not found */
+  handleRequest(path: string): TypeOwlResponse | null;
+  /** Get the base path for TypeOwl endpoints */
+  getBasePath(): string;
+  /** Get all registered domains */
+  getDomains(): string[];
+  /** Check if request is authorized based on security config */
+  validateRequest(ctx: TypeOwlRequestContext, guard?: TypeOwlGuardConfig): { valid: boolean; error?: string };
+}
+
+/**
+ * Server plugin configuration
+ * Use with `defineServerConfig` for type safety
+ * 
+ * @example
+ * // typeowl.server.config.ts
+ * import { defineServerConfig, createTypeOwl } from 'typeowl/server';
+ * 
+ * const typeowl = createTypeOwl({ version: '1.0.0' });
+ * 
+ * export default defineServerConfig({
+ *   registry: typeowl,
+ *   security: { enabled: 'development' },
+ *   
+ *   // Framework-agnostic plugin - YOU wire it to your server
+ *   plugin: (handler) => {
+ *     // Example with Fastify:
+ *     app.get('/__typeowl/*', (req, reply) => {
+ *       const res = handler.handleRequest(req.url);
+ *       if (res) return reply.type(res.contentType).send(res.body);
+ *       return reply.code(404).send({ error: 'Not found' });
+ *     });
+ *   },
+ * });
+ */
+export interface TypeOwlServerPluginConfig {
+  /** Path prefix for type endpoints (default: /__typeowl) */
+  basePath?: string;
+  
+  /** Version string for cache invalidation */
+  version?: string;
+  
+  /** Include git commit in manifest */
+  includeGitCommit?: boolean;
+  
+  /**
+   * Guard settings for TypeOwl endpoints
+   */
+  guard?: TypeOwlGuardConfig;
+  
+  /**
+   * Allowed source files/directories for type extraction.
+   * Only files within these paths can be used with extractAndRegister().
+   * 
+   * @example
+   * typeSources: './src/types/'
+   * 
+   * @example
+   * typeSources: ['./src/types/', './src/models/']
+   */
+  typeSources?: string | string[];
+  
+  /**
+   * Types to extract from source files.
+   * Declarative way to register types without calling extractAndRegister() manually.
+   * 
+   * @example
+   * // Extract all exported types from a directory
+   * extract: {
+   *   content: { from: './src/types/', types: ['Blog', 'Product'] },
+   *   models: { from: './src/models/', types: ['User', 'Order'] },
+   * }
+   */
+  extract?: Record<string, { from: string; types: string[] }>;
+  
+  /**
+   * Serving mode for TypeOwl.
+   * 
+   * - 'dynamic': Types served at runtime via registerRoutes.
+   *              Requires registerRoutes to be defined.
+   * 
+   * - 'static': Types generated as static files by CLI.
+   *             Files output to basePath (e.g., /public/__typeowl/).
+   *             registerRoutes is optional.
+   * 
+   * @default 'dynamic'
+   */
+  mode?: 'dynamic' | 'static';
+
+  /**
+   * Framework-specific route registration.
+   * Only used when mode is 'dynamic'.
+   * 
+   * @example
+   * // Fastify
+   * registerRoutes: (app: FastifyInstance, typeowl, config) => {
+   *   const basePath = typeowl.getBasePath();
+   *   app.get(`${basePath}/*`, async (req, reply) => {
+   *     const response = typeowl.handleRequest(req.url);
+   *     if (response) return reply.type(response.contentType).send(response.body);
+   *     return reply.code(404).send({ error: 'Not found' });
+   *   });
+   * }
+   */
+  registerRoutes?: (app: unknown, typeowl: TypeOwlHandler, config: TypeOwlServerPluginConfig) => void | Promise<void>;
+}
+
+/**
+ * Helper function to define TypeOwl server config with type safety
+ * 
+ * @example
+ * // typeowl.server.config.ts
+ * import { defineServerConfig } from 'typeowl/server';
+ * 
+ * export default defineServerConfig({
+ *   basePath: '/__typeowl',
+ *   security: { enabled: 'development' },
+ *   plugin: (handler) => {
+ *     // Wire to your framework here
+ *   },
+ * });
+ */
+export function defineServerConfig(config: TypeOwlServerPluginConfig): TypeOwlServerPluginConfig {
+  return config;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -155,6 +348,38 @@ export interface TypeResolver {
    * Can be dynamic based on environment
    */
   source: string | (() => string);
+  
+  /**
+   * Custom headers to send with requests to this resolver
+   * 
+   * @example
+   * headers: { 'X-TypeOwl-Key': process.env.TYPEOWL_API_KEY }
+   */
+  headers?: Record<string, string>;
+  
+  /**
+   * Hook called before each request.
+   * Use to modify headers, add auth tokens, etc.
+   * 
+   * @example
+   * onRequest: (url, init) => {
+   *   init.headers = { ...init.headers, 'Authorization': `Bearer ${getToken()}` };
+   *   return init;
+   * }
+   */
+  onRequest?: (url: string, init: RequestInit) => RequestInit | Promise<RequestInit>;
+  
+  /**
+   * Hook called after each response.
+   * Use to log, transform, or handle errors.
+   * 
+   * @example
+   * onResponse: (response) => {
+   *   if (!response.ok) console.error('TypeOwl fetch failed:', response.status);
+   *   return response;
+   * }
+   */
+  onResponse?: (response: Response) => Response | Promise<Response>;
 }
 
 /**
@@ -222,6 +447,33 @@ export interface TypeOwlConfig {
    * - number: enabled with custom interval in ms
    */
   watch?: boolean | number;
+  
+  /**
+   * Global headers to send with all requests.
+   * Per-resolver headers override these.
+   * 
+   * @example
+   * headers: { 'X-TypeOwl-Key': process.env.TYPEOWL_API_KEY }
+   */
+  headers?: Record<string, string>;
+  
+  /**
+   * Global request hook called before each request.
+   * Per-resolver hooks are called after this.
+   * 
+   * @example
+   * onRequest: (url, init) => {
+   *   console.log('Fetching:', url);
+   *   return init;
+   * }
+   */
+  onRequest?: (url: string, init: RequestInit) => RequestInit | Promise<RequestInit>;
+  
+  /**
+   * Global response hook called after each response.
+   * Per-resolver hooks are called after this.
+   */
+  onResponse?: (response: Response) => Response | Promise<Response>;
   
   /**
    * Lifecycle hooks for customization
