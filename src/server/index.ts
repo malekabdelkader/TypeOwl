@@ -285,6 +285,203 @@ export class TypeRegistry {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Auto-Typed Endpoint Registration
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Register an endpoint with automatic type extraction and validation.
+   * 
+   * This method:
+   * 1. Extracts types from Zod schemas
+   * 2. Registers them with TypeOwl
+   * 3. Returns a validated handler wrapper
+   * 
+   * @example
+   * // Define schemas
+   * const CreateUserSchema = z.object({ email: z.string().email(), name: z.string() });
+   * const UserSchema = z.object({ id: z.string(), email: z.string(), name: z.string() });
+   * 
+   * // Register endpoint with auto-validation
+   * typeowl.endpoint(app, 'POST', '/api/users', {
+   *   body: CreateUserSchema,
+   *   response: UserSchema,
+   * }, async ({ body }) => {
+   *   // body is validated and typed as { email: string, name: string }
+   *   const user = await createUser(body);
+   *   return user;  // Must match UserSchema
+   * });
+   */
+  endpoint<
+    TBody extends z.ZodType | undefined = undefined,
+    TParams extends z.ZodType | undefined = undefined,
+    TQuery extends z.ZodType | undefined = undefined,
+    TResponse extends z.ZodType | undefined = undefined
+  >(
+    app: unknown,
+    method: HttpMethod,
+    path: string,
+    schemas: {
+      body?: TBody;
+      params?: TParams;
+      query?: TQuery;
+      response?: TResponse;
+      description?: string;
+      /** Domain to register types in (default: 'endpoints') */
+      domain?: string;
+    },
+    handler: (ctx: {
+      body: TBody extends z.ZodType ? z.infer<TBody> : undefined;
+      params: TParams extends z.ZodType ? z.infer<TParams> : Record<string, string>;
+      query: TQuery extends z.ZodType ? z.infer<TQuery> : Record<string, string>;
+      request: unknown;
+      reply: unknown;
+    }) => Promise<TResponse extends z.ZodType ? z.infer<TResponse> : unknown>
+  ): this {
+    const domain = schemas.domain ?? 'endpoints';
+    const endpointName = this.generateEndpointTypeName(method, path);
+    
+    // Register types from Zod schemas
+    this.domain(domain);
+    
+    if (schemas.body) {
+      const typeName = `${endpointName}Body`;
+      this.registerZod(typeName, schemas.body);
+    }
+    if (schemas.params) {
+      const typeName = `${endpointName}Params`;
+      this.registerZod(typeName, schemas.params);
+    }
+    if (schemas.query) {
+      const typeName = `${endpointName}Query`;
+      this.registerZod(typeName, schemas.query);
+    }
+    if (schemas.response) {
+      const typeName = `${endpointName}Response`;
+      this.registerZod(typeName, schemas.response);
+    }
+    
+    // Register endpoint definition
+    this.registerEndpoint(method, path, {
+      body: schemas.body ? `${endpointName}Body` : undefined,
+      params: schemas.params ? `${endpointName}Params` : undefined,
+      query: schemas.query ? `${endpointName}Query` : undefined,
+      response: schemas.response ? `${endpointName}Response` : 'unknown',
+      description: schemas.description,
+    });
+    
+    // Create validated handler wrapper
+    const wrappedHandler = async (request: unknown, reply: unknown) => {
+      const req = request as { body?: unknown; params?: unknown; query?: unknown };
+      const rep = reply as { code: (n: number) => { send: (data: unknown) => unknown } };
+      
+      try {
+        // Validate body
+        let validatedBody: unknown = undefined;
+        if (schemas.body && req.body !== undefined) {
+          const result = schemas.body.safeParse(req.body);
+          if (!result.success) {
+            return rep.code(400).send({
+              error: 'Validation failed',
+              field: 'body',
+              issues: result.error.issues,
+            });
+          }
+          validatedBody = result.data;
+        }
+        
+        // Validate params
+        let validatedParams: unknown = req.params ?? {};
+        if (schemas.params && req.params !== undefined) {
+          const result = schemas.params.safeParse(req.params);
+          if (!result.success) {
+            return rep.code(400).send({
+              error: 'Validation failed',
+              field: 'params',
+              issues: result.error.issues,
+            });
+          }
+          validatedParams = result.data;
+        }
+        
+        // Validate query
+        let validatedQuery: unknown = req.query ?? {};
+        if (schemas.query && req.query !== undefined) {
+          const result = schemas.query.safeParse(req.query);
+          if (!result.success) {
+            return rep.code(400).send({
+              error: 'Validation failed',
+              field: 'query',
+              issues: result.error.issues,
+            });
+          }
+          validatedQuery = result.data;
+        }
+        
+        // Call handler with validated data
+        const response = await handler({
+          body: validatedBody as never,
+          params: validatedParams as never,
+          query: validatedQuery as never,
+          request,
+          reply,
+        });
+        
+        // Validate response (optional, for development)
+        if (schemas.response && process.env.NODE_ENV !== 'production') {
+          const result = schemas.response.safeParse(response);
+          if (!result.success) {
+            console.warn(`[TypeOwl] Response validation failed for ${method} ${path}:`, result.error.issues);
+          }
+        }
+        
+        return response;
+      } catch (error) {
+        console.error(`[TypeOwl] Handler error for ${method} ${path}:`, error);
+        return rep.code(500).send({ error: 'Internal server error' });
+      }
+    };
+    
+    // Register route on the app (framework-agnostic via duck typing)
+    const fastifyApp = app as { 
+      get?: (path: string, handler: unknown) => void;
+      post?: (path: string, handler: unknown) => void;
+      put?: (path: string, handler: unknown) => void;
+      patch?: (path: string, handler: unknown) => void;
+      delete?: (path: string, handler: unknown) => void;
+    };
+    
+    const methodLower = method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
+    if (fastifyApp[methodLower]) {
+      fastifyApp[methodLower]!(path, wrappedHandler);
+    }
+    
+    return this;
+  }
+
+  /**
+   * Generate a type name from method and path
+   */
+  private generateEndpointTypeName(method: HttpMethod, path: string): string {
+    // /api/users -> GetApiUsers
+    // /api/users/:id -> GetApiUsersById
+    // /api/posts/:postId/comments/:commentId -> GetApiPostsByPostIdCommentsByCommentId
+    const parts = path
+      .split('/')
+      .filter(p => p)
+      .map(p => {
+        if (p.startsWith(':')) {
+          // Convert :id to ById, :userId to ByUserId
+          const paramName = p.slice(1);
+          return 'By' + paramName.charAt(0).toUpperCase() + paramName.slice(1);
+        }
+        return p.charAt(0).toUpperCase() + p.slice(1);
+      });
+    
+    const methodPart = method.charAt(0) + method.slice(1).toLowerCase();
+    return methodPart + parts.join('');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Type File Generation
   // ─────────────────────────────────────────────────────────────────────────
 
