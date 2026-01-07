@@ -1,0 +1,29 @@
+{
+  "name": "typeowl-example-frontend",
+  "version": "1.0.0",
+  "description": "Example React frontend using TypeOwl for type safety",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run typeowl:sync && vite",
+    "dev:watch": "concurrently \"npm run typeowl:watch\" \"vite\"",
+    "typeowl:sync": "tsx scripts/sync-types.ts",
+    "typeowl:watch": "tsx scripts/sync-types.ts --watch",
+    "build": "npm run typeowl:sync && tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^8.2.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "typeowl": "file:../.."
+  }
+}
+

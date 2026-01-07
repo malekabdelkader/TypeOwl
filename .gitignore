@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# TypeOwl generated (should be gitignored in projects using TypeOwl)
+.typeowl/
+.typeowl-cache/
+examples/frontend/.typeowl/
+examples/frontend/.typeowl-cache/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+

@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# TypeOwl generated types (fetched from backend)
+.typeowl/
+.typeowl-cache/
+
+# Vite
+*.local
+
+# Logs
+*.log
+
