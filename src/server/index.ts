@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import type {
   TypeManifest,
   TypeDefinition,
@@ -67,12 +68,14 @@ namespace z {
 let _zod: typeof import('zod') | null = null;
 let _zodChecked = false;
 
+// Create require for ESM compatibility
+const require = createRequire(import.meta.url);
+
 function getZod(): typeof import('zod') {
   if (!_zodChecked) {
     _zodChecked = true;
     try {
-      // Dynamic import would be better but we need sync access
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      // Use createRequire for ESM compatibility
       _zod = require('zod');
     } catch {
       _zod = null;
@@ -900,58 +903,116 @@ export class TypeRegistry {
 // 🔄 ZOD TO TYPE DEFINITION CONVERTER
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Internal Zod definition type (not exported by Zod)
-interface ZodDef {
-  typeName?: string;
-  value?: unknown;
-  values?: readonly unknown[];
-  type?: z.ZodType;
-  shape?: () => Record<string, z.ZodType>;
-  options?: z.ZodType[];
-  left?: z.ZodType;
-  right?: z.ZodType;
-  innerType?: z.ZodType;
+// Internal Zod definition types (supports both Zod v3 and v4)
+interface ZodDefV3 {
+  typeName?: string;      // Zod v3: 'ZodString', 'ZodObject', etc.
+  value?: unknown;        // Literal value
+  values?: readonly unknown[];  // Enum values in v3
+  type?: z.ZodType;       // Array element in v3
+  shape?: () => Record<string, z.ZodType>;  // Object shape (function in v3)
+  options?: z.ZodType[];  // Union options
+  left?: z.ZodType;       // Intersection left
+  right?: z.ZodType;      // Intersection right
+  innerType?: z.ZodType;  // Optional/Nullable/Default inner type
+}
+
+interface ZodDefV4 {
+  type?: string;          // Zod v4: 'string', 'object', 'array', etc.
+  values?: unknown[];     // Literal values in v4
+  entries?: Record<string, string | number>;  // Enum entries in v4
+  element?: z.ZodType;    // Array element in v4
+  shape?: Record<string, z.ZodType>;  // Object shape (object in v4)
+  options?: z.ZodType[];  // Union options
+  left?: z.ZodType;       // Intersection left
+  right?: z.ZodType;      // Intersection right
+  innerType?: z.ZodType;  // Optional/Nullable/Default inner type
+}
+
+type ZodDef = ZodDefV3 & ZodDefV4;
+
+/**
+ * Get the Zod type name, supporting both v3 and v4
+ * v3 uses _def.typeName (e.g., 'ZodString')
+ * v4 uses _def.type (e.g., 'string')
+ */
+function getZodTypeName(schema: z.ZodType): string {
+  const def = schema._def as ZodDef;
+  
+  // Zod v3: typeName is 'ZodString', 'ZodObject', etc.
+  if (def.typeName) {
+    return def.typeName;
+  }
+  
+  // Zod v4: type is 'string', 'object', etc.
+  if (typeof def.type === 'string') {
+    return def.type;
+  }
+  
+  // Fallback: use constructor name
+  return schema.constructor.name;
 }
 
 function zodToTypeDefinition(schema: z.ZodType): TypeDefinition {
   const def = schema._def as ZodDef;
-  const typeName = def.typeName as string;
+  const typeName = getZodTypeName(schema);
 
-  switch (typeName) {
-    case 'ZodString':
+  // Normalize type name (support both v3 'ZodString' and v4 'string' formats)
+  const normalizedType = typeName.replace(/^Zod/, '').toLowerCase();
+
+  switch (normalizedType) {
+    case 'string':
       return { kind: 'primitive', value: 'string' };
-    case 'ZodNumber':
+    case 'number':
       return { kind: 'primitive', value: 'number' };
-    case 'ZodBoolean':
+    case 'boolean':
       return { kind: 'primitive', value: 'boolean' };
-    case 'ZodNull':
+    case 'null':
       return { kind: 'primitive', value: 'null' };
-    case 'ZodUndefined':
+    case 'undefined':
       return { kind: 'primitive', value: 'undefined' };
-    case 'ZodAny':
+    case 'any':
       return { kind: 'primitive', value: 'any' };
-    case 'ZodUnknown':
+    case 'unknown':
       return { kind: 'primitive', value: 'unknown' };
-    case 'ZodVoid':
+    case 'void':
       return { kind: 'primitive', value: 'void' };
       
-    case 'ZodLiteral':
-      return { kind: 'literal', value: def.value as string | number | boolean };
+    case 'literal': {
+      // v3: def.value, v4: def.values[0]
+      const value = def.value ?? (def.values as unknown[])?.[0];
+      return { kind: 'literal', value: value as string | number | boolean };
+    }
 
-    case 'ZodEnum': {
+    case 'enum': {
       // Convert enum to union of literals
-      const values = def.values as readonly (string | number)[];
+      // v3: def.values is an array
+      // v4: def.entries is an object { a: 'a', b: 'b', ... }
+      let values: (string | number)[];
+      if (def.entries) {
+        values = Object.values(def.entries);
+      } else if (def.values) {
+        values = def.values as (string | number)[];
+      } else {
+        values = [];
+      }
       return {
         kind: 'union',
         types: values.map(v => ({ kind: 'literal' as const, value: v }))
       };
     }
       
-    case 'ZodArray':
-      return { kind: 'array', element: zodToTypeDefinition(def.type!) };
+    case 'array': {
+      // v3: def.type, v4: def.element
+      const element = def.element ?? def.type;
+      if (!element) return { kind: 'array', element: { kind: 'primitive', value: 'unknown' } };
+      return { kind: 'array', element: zodToTypeDefinition(element as z.ZodType) };
+    }
       
-    case 'ZodObject': {
-      const shape = def.shape!();
+    case 'object': {
+      // v3: def.shape is a function, v4: def.shape is an object
+      const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
+      if (!shape) return { kind: 'object', properties: {} };
+      
       const properties: Record<string, PropertyDefinition> = {};
       
       for (const [key, value] of Object.entries(shape)) {
@@ -964,30 +1025,35 @@ function zodToTypeDefinition(schema: z.ZodType): TypeDefinition {
       return { kind: 'object', properties };
     }
     
-    case 'ZodUnion':
+    case 'union':
+      if (!def.options) return { kind: 'primitive', value: 'unknown' };
       return { 
         kind: 'union', 
-        types: def.options!.map((opt: z.ZodType) => zodToTypeDefinition(opt)) 
+        types: def.options.map((opt: z.ZodType) => zodToTypeDefinition(opt)) 
       };
       
-    case 'ZodIntersection':
+    case 'intersection':
+      if (!def.left || !def.right) return { kind: 'primitive', value: 'unknown' };
       return { 
         kind: 'intersection', 
-        types: [zodToTypeDefinition(def.left!), zodToTypeDefinition(def.right!)] 
+        types: [zodToTypeDefinition(def.left), zodToTypeDefinition(def.right)] 
       };
       
-    case 'ZodOptional':
-      return { kind: 'optional', type: zodToTypeDefinition(def.innerType!) };
+    case 'optional':
+      if (!def.innerType) return { kind: 'primitive', value: 'unknown' };
+      return { kind: 'optional', type: zodToTypeDefinition(def.innerType) };
       
-    case 'ZodNullable':
+    case 'nullable':
+      if (!def.innerType) return { kind: 'primitive', value: 'unknown' };
       return { 
         kind: 'union', 
-        types: [zodToTypeDefinition(def.innerType!), { kind: 'primitive', value: 'null' }] 
+        types: [zodToTypeDefinition(def.innerType), { kind: 'primitive', value: 'null' }] 
       };
 
-    case 'ZodDefault':
+    case 'default':
       // Default values don't change the type, just unwrap
-      return zodToTypeDefinition(def.innerType!);
+      if (!def.innerType) return { kind: 'primitive', value: 'unknown' };
+      return zodToTypeDefinition(def.innerType);
       
     default:
       return { kind: 'primitive', value: 'unknown' };
