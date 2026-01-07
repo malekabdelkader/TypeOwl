@@ -239,13 +239,19 @@ export interface TypeOwlServerPluginConfig {
    * Declarative way to register types without calling extractAndRegister() manually.
    * 
    * @example
-   * // Extract all exported types from a directory
+   * // Extract specific types
    * extract: {
    *   content: { from: './src/types/', types: ['Blog', 'Product'] },
    *   models: { from: './src/models/', types: ['User', 'Order'] },
    * }
+   * 
+   * @example
+   * // Extract ALL exported types from a file/directory
+   * extract: {
+   *   content: { from: './src/types/', types: '*' },
+   * }
    */
-  extract?: Record<string, { from: string; types: string[] }>;
+  extract?: Record<string, { from: string; types: string[] | '*' }>;
   
   /**
    * Serving mode for TypeOwl.

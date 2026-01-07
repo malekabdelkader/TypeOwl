@@ -235,9 +235,15 @@ export class TypeRegistry {
    *   .domain('content')
    *   .extractAndRegister(import.meta.url, ['Blog', 'Product']);
    * 
+   * @example
+   * // Extract ALL exported types from a file/directory
+   * typeowl
+   *   .domain('content')
+   *   .extractAndRegister('./src/types/', '*');
+   * 
    * @throws Error if file is not in allowed typeSources
    */
-  extractAndRegister(file: string, typeNames: string[]): this {
+  extractAndRegister(file: string, typeNames: string[] | '*'): this {
     // Resolve the file path
     let filePath: string;
     if (file.startsWith('file://')) {
@@ -264,7 +270,9 @@ export class TypeRegistry {
       );
     }
     
-    const extracted = extractTypesSync({ file: filePath, types: typeNames });
+    // If '*' is passed, extract all exported types (pass undefined to extractTypes)
+    const typesToExtract = typeNames === '*' ? undefined : typeNames;
+    const extracted = extractTypesSync({ file: filePath, types: typesToExtract });
     
     for (const type of extracted) {
       this.registerTypeInDomain(type.name, type.definition);
