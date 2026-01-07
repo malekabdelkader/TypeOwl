@@ -30,7 +30,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "postinstall": "echo '\\n🦉 TypeOwl installed!\\n⚠️  \\033[33mExperimental\\033[0m - API may change before v1.0\\n  '"
   },
   "repository": {
     "type": "git",

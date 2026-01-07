@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <strong>⚠️ Experimental</strong> — API may change before v1.0
+</p>
+
+<p align="center">
   <a href="#quick-start">Quick Start</a> •
   <a href="#three-ways-to-define-types">Type Definition Options</a> •
   <a href="#features">Features</a> •
