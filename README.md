@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/typeowl"><img src="https://img.shields.io/npm/v/typeowl.svg?style=flat-square&color=f59e0b" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/typeowl"><img src="https://img.shields.io/npm/dm/typeowl.svg?style=flat-square&color=10b981" alt="npm downloads"></a>
-  <a href="https://github.com/malekelkader/typeowl/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/typeowl.svg?style=flat-square&color=94a1b2" alt="license"></a>
+  <a href="https://github.com/malekabdelkader/TypeOwl/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/typeowl.svg?style=flat-square&color=94a1b2" alt="license"></a>
   <a href="https://typeowl.netlify.app"><img src="https://img.shields.io/badge/docs-typeowl.netlify.app-blue?style=flat-square" alt="documentation"></a>
 </p>
 
@@ -22,7 +22,7 @@
 <p align="center">
   <a href="https://typeowl.netlify.app">📚 Documentation</a> •
   <a href="https://www.npmjs.com/package/typeowl">📦 NPM Package</a> •
-  <a href="https://github.com/malekelkader/typeowl">🐙 GitHub</a>
+  <a href="https://github.com/malekabdelkader/TypeOwl">🐙 GitHub</a>
 </p>
 
 <p align="center">

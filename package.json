@@ -35,11 +35,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/malekelkader/typeowl.git"
+    "url": "git+https://github.com/malekabdelkader/TypeOwl.git"
   },
   "homepage": "https://typeowl.netlify.app",
   "bugs": {
-    "url": "https://github.com/malekelkader/typeowl/issues"
+    "url": "https://github.com/malekabdelkader/TypeOwl/issues"
   },
   "keywords": [
     "typescript",
