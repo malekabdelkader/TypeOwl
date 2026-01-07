@@ -1,6 +1,17 @@
-import type { Blog } from '@typeowl';
+import type { Blog, BlogInput } from '@typeowl';
+import { useState } from 'react';
+import { api } from '../api';
 
 export function BlogCard({ blog }: { blog: Blog }) {
+
+  const [blogForm, setBlogForm] = useState<BlogInput>({title: '', content: ''});
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBlogForm({...blogForm, [e.target.name]: e.target.value});
+  };
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    api.post('/api/blogs', { body: blogForm });
+  };
   return (
     <div style={{
       background: 'var(--bg-secondary)',

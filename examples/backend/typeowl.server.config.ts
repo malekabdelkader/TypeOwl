@@ -76,7 +76,7 @@ export default defineServerConfig({
   extract: {
     content: {
       from: './src/types/',
-      types: ['Blog', 'Product'],
+      types: ['Blog', 'Product' , 'BlogInput'],
     },
   },
 

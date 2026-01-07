@@ -36,24 +36,6 @@ const typeowl = await initTypeOwl();
 // Common params schema
 const IdParamsSchema = z.object({ id: z.string() });
 
-// Blog schemas (matching Blog type from src/types/Blog.ts)
-const BlogSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  content: z.string(),
-  published: z.boolean(),
-  createdAt: z.string(),
-});
-
-// Product schemas (matching Product type from src/types/Product.ts)
-const ProductSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  price: z.number(),
-  description: z.string().optional(),
-  inStock: z.boolean(),
-});
-
 // User schemas
 const UserSchema = z.object({
   id: z.string(),
@@ -189,17 +171,23 @@ typeowl.endpoint(app, 'DELETE', '/api/users/:id', {
   users.splice(index, 1);
   return { success: true, message: 'User deleted' };
 });
+// POST /api/blogs - Create a new blog
+typeowl.endpoint(app, 'POST', '/api/blogs', {
+  body:'BlogInput',
+  response: 'Blog',
+  description: 'Create a new blog',
+}, async ({ body }) => console.log(body));
 
 // GET /api/products - List all products
 typeowl.endpoint(app, 'GET', '/api/products', {
-  response: z.array(ProductSchema),
+  response: 'Product[]',
   description: 'List all products',
 }, async () => products);
 
 // GET /api/products/:id - Get product by ID
 typeowl.endpoint(app, 'GET', '/api/products/:id', {
   params: IdParamsSchema,
-  response: ProductSchema,
+  response: 'Product | null',  // Using extracted type reference!
   description: 'Get product by ID',
 }, async ({ params, reply }) => {
   const product = products.find(p => p.id === params.id);

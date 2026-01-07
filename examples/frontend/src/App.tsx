@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import type { 
   Blog,                           // 🟡 Static type from src/types/
   GetApiUsersResponse,            // 🟢 Array type from typeowl.endpoint()
-  GetApiProductsResponse,         // 🟢 Array type from typeowl.endpoint()
+  Product,
 } from '@typeowl';
 
 // API client with 3 fetch methods
@@ -16,7 +16,7 @@ import { UserCard, BlogCard, ProductCard, HealthStatus, Section } from './compon
 export default function App() {
   const [users, setUsers] = useState<GetApiUsersResponse>([]);
   const [blogs, setBlogs] = useState<Blog[]>([]);
-  const [products, setProducts] = useState<GetApiProductsResponse>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

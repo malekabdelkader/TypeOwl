@@ -1,5 +1,5 @@
 import type { Product } from './Product.ts';
-import type { Blog } from './Blog.ts';
+import type { Blog ,BlogInput } from './Blog.ts';
 
 
-export type { Blog, Product };
+export type { Blog, Product , BlogInput};

@@ -8,3 +8,4 @@ export type Blog = {
   createdAt: string;
   author?: Author;
 }
+export type  BlogInput = Pick<Blog, 'title' | 'content'>;

@@ -338,86 +338,145 @@ export class TypeRegistry {
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
-   * Register an endpoint with automatic type extraction and validation.
+   * Register an endpoint with automatic type detection.
    * 
-   * This method:
-   * 1. Extracts types from Zod schemas
-   * 2. Registers them with TypeOwl
-   * 3. Returns a validated handler wrapper
+   * Supports both Zod schemas (with runtime validation) and type references
+   * (for extracted TypeScript types). The system auto-detects:
+   * - String → Type reference (e.g., 'Product', 'Blog[]')
+   * - Zod schema → Converts to TypeScript + adds validation
    * 
    * @example
-   * // Define schemas
-   * const CreateUserSchema = z.object({ email: z.string().email(), name: z.string() });
-   * const UserSchema = z.object({ id: z.string(), email: z.string(), name: z.string() });
-   * 
-   * // Register endpoint with auto-validation
+   * // Using Zod schemas (with runtime validation)
    * typeowl.endpoint(app, 'POST', '/api/users', {
    *   body: CreateUserSchema,
    *   response: UserSchema,
    * }, async ({ body }) => {
-   *   // body is validated and typed as { email: string, name: string }
-   *   const user = await createUser(body);
-   *   return user;  // Must match UserSchema
+   *   return await createUser(body);
    * });
+   * 
+   * @example
+   * // Using extracted type references (no Zod needed!)
+   * typeowl.endpoint(app, 'GET', '/api/products', {
+   *   response: 'Product[]',  // References Product from extract config
+   * }, async () => products);
+   * 
+   * @example
+   * // Mix and match - Zod for body validation, type ref for response
+   * typeowl.endpoint(app, 'POST', '/api/blogs', {
+   *   body: CreateBlogSchema,  // Zod = validates input
+   *   response: 'Blog',        // String = uses extracted type
+   * }, async ({ body }) => createBlog(body));
    */
   endpoint<
-    TBody extends z.ZodType | undefined = undefined,
-    TParams extends z.ZodType | undefined = undefined,
-    TQuery extends z.ZodType | undefined = undefined,
-    TResponse extends z.ZodType | undefined = undefined
+    TBody extends z.ZodType | string | undefined = undefined,
+    TParams extends z.ZodType | string | undefined = undefined,
+    TQuery extends z.ZodType | string | undefined = undefined,
+    TResponse extends z.ZodType | string | undefined = undefined
   >(
     app: unknown,
     method: HttpMethod,
     path: string,
     schemas: {
+      /** 
+       * Request body type - can be:
+       * - Zod schema: Validates input and generates type
+       * - String: References an extracted type (e.g., 'CreateBlog')
+       */
       body?: TBody;
+      /** 
+       * URL params type - can be:
+       * - Zod schema: Validates params and generates type
+       * - String: References an extracted type
+       */
       params?: TParams;
+      /** 
+       * Query string type - can be:
+       * - Zod schema: Validates query and generates type
+       * - String: References an extracted type
+       */
       query?: TQuery;
+      /** 
+       * Response type - can be:
+       * - Zod schema: Generates type (validates in dev mode)
+       * - String: References an extracted type (e.g., 'Product', 'Blog[]', 'User | null')
+       */
       response?: TResponse;
       description?: string;
       /** Domain to register types in (default: 'endpoints') */
       domain?: string;
     },
     handler: (ctx: {
-      body: TBody extends z.ZodType ? z.infer<TBody> : undefined;
+      body: TBody extends z.ZodType ? z.infer<TBody> : unknown;
       params: TParams extends z.ZodType ? z.infer<TParams> : Record<string, string>;
       query: TQuery extends z.ZodType ? z.infer<TQuery> : Record<string, string>;
       request: unknown;
       reply: unknown;
     }) => Promise<TResponse extends z.ZodType ? z.infer<TResponse> : unknown>
   ): this {
-    // Validate Zod is installed
-    getZod();
-    
     const domain = schemas.domain ?? 'endpoints';
     const endpointName = this.generateEndpointTypeName(method, path);
     
-    // Register types from Zod schemas
+    // Helper to check if value is a Zod schema
+    const isZodSchema = (val: unknown): val is z.ZodType => {
+      return val !== null && typeof val === 'object' && '_def' in val && 'safeParse' in val;
+    };
+    
+    // Check if we need Zod (only if Zod schemas are provided)
+    const hasZodSchemas = isZodSchema(schemas.body) || isZodSchema(schemas.params) || 
+                          isZodSchema(schemas.query) || isZodSchema(schemas.response);
+    if (hasZodSchemas) {
+      getZod();
+    }
+    
+    // Register types from Zod schemas and determine type names
     this.domain(domain);
     
-    if (schemas.body) {
-      const typeName = `${endpointName}Body`;
-      this.registerZod(typeName, schemas.body);
+    let bodyTypeName: string | undefined;
+    let bodySchema: z.ZodType | undefined;
+    if (isZodSchema(schemas.body)) {
+      bodyTypeName = `${endpointName}Body`;
+      bodySchema = schemas.body;
+      this.registerZod(bodyTypeName, schemas.body);
+    } else if (typeof schemas.body === 'string') {
+      bodyTypeName = schemas.body;
     }
-    if (schemas.params) {
-      const typeName = `${endpointName}Params`;
-      this.registerZod(typeName, schemas.params);
+    
+    let paramsTypeName: string | undefined;
+    let paramsSchema: z.ZodType | undefined;
+    if (isZodSchema(schemas.params)) {
+      paramsTypeName = `${endpointName}Params`;
+      paramsSchema = schemas.params;
+      this.registerZod(paramsTypeName, schemas.params);
+    } else if (typeof schemas.params === 'string') {
+      paramsTypeName = schemas.params;
     }
-    if (schemas.query) {
-      const typeName = `${endpointName}Query`;
-      this.registerZod(typeName, schemas.query);
+    
+    let queryTypeName: string | undefined;
+    let querySchema: z.ZodType | undefined;
+    if (isZodSchema(schemas.query)) {
+      queryTypeName = `${endpointName}Query`;
+      querySchema = schemas.query;
+      this.registerZod(queryTypeName, schemas.query);
+    } else if (typeof schemas.query === 'string') {
+      queryTypeName = schemas.query;
     }
-    if (schemas.response) {
-      const typeName = `${endpointName}Response`;
-      this.registerZod(typeName, schemas.response);
+    
+    let responseTypeName: string = 'unknown';
+    let responseSchema: z.ZodType | undefined;
+    if (isZodSchema(schemas.response)) {
+      responseTypeName = `${endpointName}Response`;
+      responseSchema = schemas.response;
+      this.registerZod(responseTypeName, schemas.response);
+    } else if (typeof schemas.response === 'string') {
+      responseTypeName = schemas.response;
     }
     
     // Register endpoint definition
     this.registerEndpoint(method, path, {
-      body: schemas.body ? `${endpointName}Body` : undefined,
-      params: schemas.params ? `${endpointName}Params` : undefined,
-      query: schemas.query ? `${endpointName}Query` : undefined,
-      response: schemas.response ? `${endpointName}Response` : 'unknown',
+      body: bodyTypeName,
+      params: paramsTypeName,
+      query: queryTypeName,
+      response: responseTypeName,
       description: schemas.description,
     });
     
@@ -427,10 +486,10 @@ export class TypeRegistry {
       const rep = reply as { code: (n: number) => { send: (data: unknown) => unknown } };
       
       try {
-        // Validate body
-        let validatedBody: unknown = undefined;
-        if (schemas.body && req.body !== undefined) {
-          const result = schemas.body.safeParse(req.body);
+        // Validate body (only if Zod schema was provided)
+        let validatedBody: unknown = req.body;
+        if (bodySchema && req.body !== undefined) {
+          const result = bodySchema.safeParse(req.body);
           if (!result.success) {
             return rep.code(400).send({
               error: 'Validation failed',
@@ -441,10 +500,10 @@ export class TypeRegistry {
           validatedBody = result.data;
         }
         
-        // Validate params
+        // Validate params (only if Zod schema was provided)
         let validatedParams: unknown = req.params ?? {};
-        if (schemas.params && req.params !== undefined) {
-          const result = schemas.params.safeParse(req.params);
+        if (paramsSchema && req.params !== undefined) {
+          const result = paramsSchema.safeParse(req.params);
           if (!result.success) {
             return rep.code(400).send({
               error: 'Validation failed',
@@ -455,10 +514,10 @@ export class TypeRegistry {
           validatedParams = result.data;
         }
         
-        // Validate query
+        // Validate query (only if Zod schema was provided)
         let validatedQuery: unknown = req.query ?? {};
-        if (schemas.query && req.query !== undefined) {
-          const result = schemas.query.safeParse(req.query);
+        if (querySchema && req.query !== undefined) {
+          const result = querySchema.safeParse(req.query);
           if (!result.success) {
             return rep.code(400).send({
               error: 'Validation failed',
@@ -478,9 +537,9 @@ export class TypeRegistry {
           reply,
         });
         
-        // Validate response (optional, for development)
-        if (schemas.response && process.env.NODE_ENV !== 'production') {
-          const result = schemas.response.safeParse(response);
+        // Validate response (optional, for development, only if Zod schema provided)
+        if (responseSchema && process.env.NODE_ENV !== 'production') {
+          const result = responseSchema.safeParse(response);
           if (!result.success) {
             console.warn(`[TypeOwl] Response validation failed for ${method} ${path}:`, result.error.issues);
           }
