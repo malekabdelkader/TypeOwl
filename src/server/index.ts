@@ -9,7 +9,6 @@ import { createHash } from 'node:crypto';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { z } from 'zod';
 import type {
   TypeManifest,
   TypeDefinition,
@@ -48,6 +47,48 @@ export {
 
 // Import for internal use
 import { extractTypes as extractTypesSync } from './extract.js';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔧 OPTIONAL ZOD SUPPORT
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Zod types for type annotations (these are erased at runtime)
+// eslint-disable-next-line @typescript-eslint/no-namespace
+namespace z {
+  export type ZodType<T = unknown> = {
+    _def: unknown;
+    safeParse: (data: unknown) => { success: true; data: T } | { success: false; error: { issues: unknown[] } };
+    isOptional: () => boolean;
+  };
+  export type infer<T> = T extends ZodType<infer U> ? U : never;
+}
+
+// Lazy Zod loader - only throws when actually used
+let _zod: typeof import('zod') | null = null;
+let _zodChecked = false;
+
+function getZod(): typeof import('zod') {
+  if (!_zodChecked) {
+    _zodChecked = true;
+    try {
+      // Dynamic import would be better but we need sync access
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      _zod = require('zod');
+    } catch {
+      _zod = null;
+    }
+  }
+  
+  if (!_zod) {
+    throw new Error(
+      '[TypeOwl] Zod is required for registerZod() and typeowl.endpoint().\n' +
+      'Install it with: npm install zod\n\n' +
+      'If you only need static type extraction, use the extract config instead.'
+    );
+  }
+  
+  return _zod;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🏗️ TYPE REGISTRY
@@ -132,8 +173,13 @@ export class TypeRegistry {
 
   /**
    * Register a type from a Zod schema
+   * 
+   * @requires zod - Install with: npm install zod
    */
   registerZod<T extends z.ZodType>(name: string, schema: T): this {
+    // Validate Zod is installed
+    getZod();
+    
     const typeDef = zodToTypeDefinition(schema);
     this.registerTypeInDomain(name, typeDef);
     return this;
@@ -337,6 +383,9 @@ export class TypeRegistry {
       reply: unknown;
     }) => Promise<TResponse extends z.ZodType ? z.infer<TResponse> : unknown>
   ): this {
+    // Validate Zod is installed
+    getZod();
+    
     const domain = schemas.domain ?? 'endpoints';
     const endpointName = this.generateEndpointTypeName(method, path);
     

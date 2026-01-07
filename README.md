@@ -50,121 +50,326 @@ interface User {
 
 ```bash
 npm install typeowl
+
+# Optional: Install Zod for runtime validation (typeowl.endpoint)
+npm install zod
 ```
 
 ### Backend Setup
 
+**1. Create config file:**
+
+```typescript
+// typeowl.server.config.ts
+import { defineServerConfig } from 'typeowl/server';
+
+export default defineServerConfig({
+  version: '1.0.0',
+  
+  // Security: Only these paths can have types extracted
+  typeSources: './src/types/',
+  
+  // Extract types from files (creates content.d.ts)
+  extract: {
+    content: {
+      from: './src/types/',
+      types: ['Blog', 'Product'],
+    },
+  },
+  
+  // Register TypeOwl routes (framework-specific)
+  registerRoutes: (app, typeowl) => {
+    // For Fastify:
+    app.get('/__typeowl', (req, reply) => { /* ... */ });
+    app.get('/__typeowl/*', (req, reply) => { /* ... */ });
+  },
+});
+```
+
+**2. Use in your server:**
+
 ```typescript
 // server.ts
-import { createTypeOwl } from 'typeowl/server';
+import Fastify from 'fastify';
 import { z } from 'zod';
+import { initTypeOwl } from 'typeowl/server';
 
-const typeowl = createTypeOwl({ version: '1.0.0' });
+// Auto-loads config from typeowl.server.config.ts
+const typeowl = await initTypeOwl();
 
-// Register types by domain
+const app = Fastify();
+
+// Mount TypeOwl routes
+await typeowl.mount(app);
+
+// Define schemas
 const UserSchema = z.object({
   id: z.string(),
-  email: z.string(),
-  name: z.string().nullable(),
+  email: z.string().email(),
+  name: z.string(),
   role: z.enum(['admin', 'user', 'guest']),
 });
 
-typeowl
-  .domain('users')
-  .registerZod('User', UserSchema)
-  .registerZod('CreateUserInput', CreateUserSchema);
+// 🟢 typeowl.endpoint() - Full type generation + validation
+typeowl.endpoint(app, 'GET', '/api/users', {
+  response: z.array(UserSchema),
+}, async () => users);
 
-typeowl
-  .domain('posts')
-  .registerZod('Post', PostSchema);
-
-// Register API endpoints
-typeowl
-  .domain('main')
-  .get('/api/users', 'User[]', { query: 'UserQuery' })
-  .post('/api/users', 'User', { body: 'CreateUserInput' });
-
-// In your HTTP server, handle TypeOwl requests
-app.get('/__typeowl/*', (req, res) => {
-  const response = typeowl.handleRequest(req.path);
-  if (response) {
-    res.type(response.contentType).send(response.body);
-  }
+typeowl.endpoint(app, 'POST', '/api/users', {
+  body: CreateUserSchema,
+  response: UserSchema,
+}, async ({ body }) => {
+  // body is validated and typed!
+  return createUser(body);
 });
+
+app.listen({ port: 3001 });
 ```
 
 ### Frontend Setup
 
-```typescript
-// scripts/sync-types.ts
-import { syncTypes } from 'typeowl/client';
+**1. Create config file:**
 
-await syncTypes({
-  source: 'http://localhost:3001/__typeowl',
-  outputDir: './.typeowl',
+```typescript
+// typeowl.config.ts
+import { defineConfig } from 'typeowl';
+
+export default defineConfig({
+  resolvers: {
+    name: 'api',
+    source: 'http://localhost:3001/__typeowl',
+  },
+  output: './.typeowl',
 });
 ```
 
+**2. Create sync script:**
+
+```typescript
+// scripts/sync-types.ts
+import { loadConfigAndSync } from 'typeowl';
+
+await loadConfigAndSync();
+```
+
+**3. Add to package.json:**
+
 ```json
-// package.json
 {
   "scripts": {
     "dev": "npm run typeowl:sync && vite",
-    "typeowl:sync": "tsx scripts/sync-types.ts",
-    "typeowl:watch": "tsx scripts/sync-types.ts --watch"
+    "typeowl:sync": "tsx scripts/sync-types.ts"
   }
 }
 ```
 
-```typescript
-// In your frontend code
-import type { User, Post, ApiEndpoints } from '@typeowl';
+**4. Configure TypeScript paths:**
 
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "paths": {
+      "@typeowl": ["./.typeowl/index.d.ts"]
+    }
+  }
+}
+```
+
+**5. Use in your frontend:**
+
+```typescript
+import type { User, Blog, ApiEndpoints } from '@typeowl';
+
+// Full autocomplete and type safety! ✨
 const users: User[] = await fetch('/api/users').then(r => r.json());
-// Full autocomplete! ✨
+```
+
+## Three Ways to Define Types
+
+TypeOwl supports three approaches, from zero-config to full validation:
+
+### 🔴 Option 1: No TypeOwl (Raw Handlers)
+
+```typescript
+// Backend: Regular handler, no TypeOwl
+app.get('/api/health', async () => {
+  return { status: 'ok' };
+});
+
+// Frontend: Manual type or `any`
+const health = await fetch('/api/health').then(r => r.json()) as HealthResponse;
+```
+
+### 🟡 Option 2: Static Types (Extract from Files)
+
+```typescript
+// src/types/Blog.ts
+export type Blog = {
+  id: string;
+  title: string;
+  content: string;
+};
+
+// typeowl.server.config.ts
+extract: {
+  content: { from: './src/types/', types: ['Blog'] },
+}
+
+// Frontend: Force-cast with exposed type
+import type { Blog } from '@typeowl';
+const blogs = await fetch('/api/blogs').then(r => r.json()) as Blog[];
+```
+
+### 🟢 Option 3: typeowl.endpoint() (Full Type Safety + Validation)
+
+```typescript
+// Backend: Auto-validates AND registers types
+typeowl.endpoint(app, 'GET', '/api/users', {
+  response: z.array(UserSchema),
+}, async () => users);
+
+typeowl.endpoint(app, 'POST', '/api/users', {
+  body: CreateUserSchema,
+  response: UserSchema,
+}, async ({ body }) => {
+  // body is validated by Zod before reaching here!
+  return createUser(body);
+});
+
+// Frontend: Fully typed ApiEndpoints
+import type { ApiEndpoints } from '@typeowl';
+// ApiEndpoints['GET /api/users'] = { response: User[] }
+// ApiEndpoints['POST /api/users'] = { body: CreateUser; response: User }
+```
+
+## Building a Typed API Client
+
+Use the generated `ApiEndpoints` to build an axios-like client:
+
+```typescript
+// api/client.ts
+import type { ApiEndpoints } from '@typeowl';
+
+type ExtractPaths<Method extends string> = {
+  [K in keyof ApiEndpoints]: K extends `${Method} ${infer Path}` ? Path : never;
+}[keyof ApiEndpoints];
+
+type GetPath = ExtractPaths<'GET'>;
+type PostPath = ExtractPaths<'POST'>;
+
+type EndpointConfig<M extends string, P extends string> = 
+  `${M} ${P}` extends keyof ApiEndpoints 
+    ? ApiEndpoints[`${M} ${P}`] 
+    : never;
+
+export const api = {
+  get: <P extends GetPath>(path: P) => 
+    fetch(path).then(r => r.json()) as Promise<EndpointConfig<'GET', P>['response']>,
+
+  post: <P extends PostPath>(path: P, body: EndpointConfig<'POST', P>['body']) => 
+    fetch(path, { 
+      method: 'POST', 
+      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+    }).then(r => r.json()) as Promise<EndpointConfig<'POST', P>['response']>,
+};
+
+// Usage - fully typed!
+const users = await api.get('/api/users');     // User[]
+const user = await api.post('/api/users', { name: 'John', email: 'john@example.com' }); // User
 ```
 
 ## Features
 
 - 🔄 **Incremental sync** — Only fetches files that changed (via hash comparison)
-- 📦 **Domain-based organization** — Separate types by domain (users, posts, common)
+- 📦 **Domain-based organization** — Separate types by domain (users, posts, content)
 - 🗺️ **Endpoint mapping** — Full type safety for API calls via `ApiEndpoints`
+- ✅ **Runtime validation** — `typeowl.endpoint()` validates with Zod (optional)
+- 📁 **Static type extraction** — Extract types directly from `.ts` files (no Zod needed!)
 - 💾 **Offline cache** — Works when backend is down
 - 👀 **Watch mode** — Auto-refresh on changes
-- 🚫 **No git conflicts** — Generated files are gitignored
+- 🔒 **Guard config** — Protect TypeOwl endpoints with API keys
 
-## How It Works
+### Zod is Optional
 
-1. **Backend** registers types by domain and exposes them via `/__typeowl`
-2. **Frontend** runs `typeowl sync` during development
-3. Manifest is fetched (lightweight JSON with file hashes)
-4. Only changed type files are downloaded
-5. Types are written to `.typeowl/` directory
-6. You import types normally — TypeScript sees them as any other module
-7. In production, no type endpoints are needed (types are compile-time only)
+| Feature | Requires Zod? |
+|---------|---------------|
+| Static type extraction (`extract` config) | ❌ No |
+| `registerType()`, `registerObject()` | ❌ No |
+| Client-side type sync | ❌ No |
+| `registerZod()` | ✅ Yes |
+| `typeowl.endpoint()` (auto-validation) | ✅ Yes |
 
-## Manifest Structure
+## Server Configuration
 
-TypeOwl uses a lightweight manifest that only contains metadata and file pointers:
+```typescript
+// typeowl.server.config.ts
+import { defineServerConfig } from 'typeowl/server';
 
-```json
-{
-  "manifestVersion": "1.0.0",
-  "version": "1.0.0",
-  "files": {
-    "users": {
-      "path": "/__typeowl/types/users.d.ts",
-      "hash": "a3f8c2b1",
-      "exports": ["User", "CreateUserInput", "UserQuery"]
-    },
-    "posts": {
-      "path": "/__typeowl/types/posts.d.ts",
-      "hash": "d4e5f6a7",
-      "exports": ["Post", "CreatePostInput"]
-    }
+export default defineServerConfig({
+  // Base path for TypeOwl endpoints
+  basePath: '/__typeowl',
+  
+  // Version for cache invalidation
+  version: '1.0.0',
+  
+  // Include git commit in manifest
+  includeGitCommit: false,
+  
+  // Allowed paths for type extraction (security)
+  typeSources: './src/types/',
+  
+  // Static type extraction
+  extract: {
+    content: { from: './src/types/', types: ['Blog', 'Product'] },
+    models: { from: './src/models/', types: ['User', 'Order'] },
   },
-  "endpoints": { ... }
-}
+  
+  // Dynamic mode: register HTTP routes
+  mode: 'dynamic',
+  registerRoutes: (app, typeowl, config) => {
+    // Your framework-specific route registration
+  },
+  
+  // Security: protect TypeOwl endpoints
+  guard: {
+    enabled: 'development', // true | false | 'development'
+    apiKey: process.env.TYPEOWL_API_KEY,
+  },
+});
+```
+
+## Client Configuration
+
+```typescript
+// typeowl.config.ts
+import { defineConfig } from 'typeowl';
+
+export default defineConfig({
+  // Single backend
+  resolvers: 'http://localhost:3001/__typeowl',
+  
+  // Or multiple backends
+  resolvers: [
+    { name: 'api', source: 'http://localhost:3001/__typeowl' },
+    { name: 'auth', source: 'http://localhost:3002/__typeowl' },
+  ],
+  
+  // Output directory
+  output: './.typeowl',
+  
+  // Cache for offline fallback
+  cache: './.typeowl-cache',
+  
+  // Watch mode (poll interval in ms)
+  watch: 5000,
+  
+  // Request hooks
+  headers: { 'X-TypeOwl-Key': 'my-api-key' },
+  onRequest: (url, init) => init,
+  onResponse: (response) => response,
+});
 ```
 
 ## Examples
@@ -183,59 +388,8 @@ npm install
 npm run dev
 ```
 
-- **Backend**: Fastify server with TypeOwl type endpoints
-- **Frontend**: React + Vite app that syncs and uses types
-
-## API Reference
-
-### Server
-
-```typescript
-import { createTypeOwl } from 'typeowl/server';
-
-const typeowl = createTypeOwl({
-  version: '1.0.0',        // For cache invalidation
-  basePath: '/__typeowl',  // Where to expose types
-});
-
-// Switch to a domain
-typeowl.domain('users');
-
-// Register types
-typeowl.registerZod('User', UserSchema);
-typeowl.registerObject('Config', { key: 'string', value: 'unknown' });
-
-// Register endpoints
-typeowl.get('/api/users', 'User[]', { query: 'UserQuery' });
-typeowl.post('/api/users', 'User', { body: 'CreateUserInput' });
-
-// Handle requests
-const response = typeowl.handleRequest(req.path);
-if (response) {
-  res.type(response.contentType).send(response.body);
-}
-```
-
-### Client
-
-```typescript
-import { syncTypes, createTypeOwlClient } from 'typeowl/client';
-
-// One-shot sync
-await syncTypes({
-  source: 'http://localhost:3001/__typeowl',
-  outputDir: '.typeowl',
-});
-
-// Or with watch mode
-const client = createTypeOwlClient({
-  source: 'http://localhost:3001/__typeowl',
-  watchInterval: 5000, // Poll every 5 seconds
-});
-
-await client.sync();
-client.startWatch();
-```
+- **Backend**: Fastify server with all three type definition approaches
+- **Frontend**: React + Vite app with typed API client
 
 ## Comparison
 
@@ -244,12 +398,15 @@ client.startWatch();
 | Works across repos | ✅ | ❌ (needs monorepo) | ✅ |
 | No build step | ✅ | ✅ | ❌ |
 | REST APIs | ✅ | ❌ | ❌ |
+| Runtime validation | ✅ | ✅ | ❌ |
 | Incremental sync | ✅ | N/A | ❌ |
+| Static type extraction | ✅ | ❌ | ❌ |
 | Endpoint type map | ✅ | ✅ | ✅ |
 
 ## Roadmap
 
 - [ ] CLI tool (`npx typeowl sync`)
+- [ ] Named endpoints (config-based mapper)
 - [ ] Vite/Webpack plugins
 - [ ] Database schema integration (Prisma, Drizzle)
 - [ ] VS Code extension
