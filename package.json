@@ -1,6 +1,6 @@
 {
   "name": "typeowl",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "description": "🦉 Runtime type synchronization between backend and frontend — types that fly across repos",
   "type": "module",
   "main": "dist/index.js",
@@ -22,9 +22,23 @@
       "import": "./dist/client/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/malekelkader/typeowl.git"
+  },
+  "homepage": "https://typeowl.netlify.app",
+  "bugs": {
+    "url": "https://github.com/malekelkader/typeowl/issues"
   },
   "keywords": [
     "typescript",
@@ -34,7 +48,10 @@
     "backend",
     "frontend",
     "rpc",
-    "codegen"
+    "codegen",
+    "zod",
+    "type-safety",
+    "monorepo"
   ],
   "author": "Malek Abdelkader",
   "license": "MIT",
