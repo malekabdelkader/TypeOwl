@@ -1,6 +1,7 @@
 {
   "name": "typeowl-example-frontend",
   "version": "1.0.0",
+  "private": true,
   "description": "Example React frontend using TypeOwl for type safety",
   "type": "module",
   "scripts": {

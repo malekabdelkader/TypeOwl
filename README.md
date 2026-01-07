@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="examples/frontend/public/typeOwl.logo.png" alt="TypeOwl Logo" width="180" />
+  <img src="https://typeowl.netlify.app/typeOwl.logo.png" alt="TypeOwl Logo" width="180" />
 </p>
 
 <h1 align="center">TypeOwl</h1>

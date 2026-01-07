@@ -1,6 +1,7 @@
 {
   "name": "typeowl-example-backend",
   "version": "1.0.0",
+  "private": true,
   "description": "Example backend using TypeOwl for type sharing",
   "type": "module",
   "scripts": {
