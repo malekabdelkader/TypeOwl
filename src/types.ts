@@ -21,7 +21,7 @@ export type TypeDefinition =
   | { kind: 'intersection'; types: TypeDefinition[] }
   | { kind: 'reference'; name: string }  // Reference to another type by name
   | { kind: 'optional'; type: TypeDefinition }
-  | { kind: 'raw'; typescript: string };  // Raw TypeScript string (extracted from source)
+  | { kind: 'raw'; typescript: string; generics?: string };  // Raw TypeScript string (extracted from source)
 
 export interface PropertyDefinition {
   type: TypeDefinition;

@@ -2,10 +2,11 @@
  * 🦉 TypeOwl Type Extraction
  * 
  * Extracts TypeScript types and interfaces directly from source files.
+ * Automatically follows and includes dependent/nested types.
  * This enables zero-duplication type sharing.
  */
 
-import { Project, SourceFile, TypeAliasDeclaration, InterfaceDeclaration, SyntaxKind } from 'ts-morph';
+import { Project, SourceFile, TypeAliasDeclaration, InterfaceDeclaration, EnumDeclaration, Node, SyntaxKind, Type } from 'ts-morph';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { statSync, readdirSync } from 'node:fs';
@@ -20,11 +21,13 @@ export interface ExtractedType {
   definition: TypeDefinition;
   /** The raw TypeScript source for this type */
   source: string;
+  /** Whether this type was explicitly requested or auto-discovered as a dependency */
+  isDependency?: boolean;
 }
 
 export interface ExtractOptions {
   /**
-   * Path to the TypeScript source file
+   * Path to the TypeScript source file or directory
    * Can be:
    * - Absolute path: '/Users/.../src/types.ts'
    * - Relative path: './types.ts' (relative to cwd)
@@ -43,33 +46,43 @@ export interface ExtractOptions {
    * If not provided, uses default TypeScript settings
    */
   tsconfig?: string;
+  
+  /**
+   * Whether to automatically include dependent types
+   * @default true
+   */
+  includeDependencies?: boolean;
 }
+
+// Built-in types that should not be extracted
+const BUILTIN_TYPES = new Set([
+  'string', 'number', 'boolean', 'null', 'undefined', 'void', 'never', 'any', 'unknown',
+  'object', 'symbol', 'bigint', 'Function', 'Object', 'String', 'Number', 'Boolean',
+  'Array', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise', 'Date', 'RegExp', 'Error',
+  'Record', 'Partial', 'Required', 'Readonly', 'Pick', 'Omit', 'Exclude', 'Extract',
+  'NonNullable', 'Parameters', 'ConstructorParameters', 'ReturnType', 'InstanceType',
+  'ThisType', 'Uppercase', 'Lowercase', 'Capitalize', 'Uncapitalize',
+]);
 
 /**
  * Extract types and interfaces from a TypeScript source file
+ * Automatically follows and includes dependent types.
  * 
  * @example
- * // Extract specific types
- * const types = await extractTypes({
+ * // Extract specific types (will auto-include dependencies)
+ * const types = extractTypes({
  *   file: './src/types.ts',
- *   types: ['User', 'Post', 'Comment']
- * });
- * 
- * @example
- * // Extract all exported types from current file
- * const types = await extractTypes({
- *   file: import.meta.url
- * });
- * 
- * @example
- * // Extract from absolute path
- * const types = await extractTypes({
- *   file: '/path/to/types.ts',
  *   types: ['Blog', 'Product']
+ * });
+ * 
+ * @example
+ * // Extract all exported types from a directory
+ * const types = extractTypes({
+ *   file: './src/types/'
  * });
  */
 export function extractTypes(options: ExtractOptions): ExtractedType[] {
-  const { file, types: typeNames, tsconfig } = options;
+  const { file, types: typeNames, tsconfig, includeDependencies = true } = options;
   
   // Resolve the file path
   let filePath: string;
@@ -82,26 +95,27 @@ export function extractTypes(options: ExtractOptions): ExtractedType[] {
     filePath = resolve(process.cwd(), file);
   }
   
-  // Create a ts-morph project
+  // Create a ts-morph project with resolution enabled
   const project = new Project({
     tsConfigFilePath: tsconfig,
     skipAddingFilesFromTsConfig: true,
+    compilerOptions: {
+      // Enable module resolution to follow imports
+      moduleResolution: 100, // NodeNext
+      allowSyntheticDefaultImports: true,
+      esModuleInterop: true,
+    },
   });
   
   // Collect source files - handle both files and directories
   const sourceFiles: SourceFile[] = [];
+  const baseDir = statSync(filePath).isDirectory() ? filePath : dirname(filePath);
   
   try {
     const stat = statSync(filePath);
     if (stat.isDirectory()) {
-      // Scan directory for .ts files (non-recursive for now)
-      const files = readdirSync(filePath)
-        .filter(f => f.endsWith('.ts') && !f.endsWith('.d.ts'))
-        .map(f => join(filePath, f));
-      
-      for (const f of files) {
-        sourceFiles.push(project.addSourceFileAtPath(f));
-      }
+      // Scan directory for .ts files recursively
+      addFilesRecursively(filePath, project, sourceFiles);
     } else {
       sourceFiles.push(project.addSourceFileAtPath(filePath));
     }
@@ -109,40 +123,393 @@ export function extractTypes(options: ExtractOptions): ExtractedType[] {
     throw new Error(`[TypeOwl] Failed to read path: ${filePath}\n${e}`);
   }
   
-  // Extract types from all source files
-  const extracted: ExtractedType[] = [];
+  // Track extracted types to avoid duplicates
+  const extractedMap = new Map<string, ExtractedType>();
+  // Track types being processed to detect cycles
+  const processing = new Set<string>();
   
-  for (const sourceFile of sourceFiles) {
-    // Get type aliases
-    const typeAliases = sourceFile.getTypeAliases();
-    for (const typeAlias of typeAliases) {
-      const name = typeAlias.getName();
-      if (typeNames && !typeNames.includes(name)) continue;
-      if (!typeNames && !typeAlias.isExported()) continue;
+  /**
+   * Extract a single type and its dependencies
+   */
+  function extractTypeByName(
+    name: string, 
+    isDependency: boolean = false
+  ): void {
+    // Skip if already extracted or processing
+    if (extractedMap.has(name) || processing.has(name)) return;
+    // Skip built-in types
+    if (BUILTIN_TYPES.has(name)) return;
+    
+    processing.add(name);
+    
+    // Find the type declaration across all source files
+    for (const sourceFile of project.getSourceFiles()) {
+      // Check type aliases
+      const typeAlias = sourceFile.getTypeAlias(name);
+      if (typeAlias) {
+        const extracted = extractTypeAlias(typeAlias, isDependency);
+        extractedMap.set(name, extracted);
+        
+        // Extract dependencies if enabled
+        if (includeDependencies) {
+          const deps = findTypeDependencies(typeAlias);
+          for (const dep of deps) {
+            extractTypeByName(dep, true);
+          }
+        }
+        processing.delete(name);
+        return;
+      }
       
-      extracted.push({
-        name,
-        definition: extractTypeAliasDefinition(typeAlias),
-        source: getTypeAliasSource(typeAlias),
-      });
+      // Check interfaces
+      const iface = sourceFile.getInterface(name);
+      if (iface) {
+        const extracted = extractInterface(iface, isDependency);
+        extractedMap.set(name, extracted);
+        
+        // Extract dependencies if enabled
+        if (includeDependencies) {
+          const deps = findTypeDependencies(iface);
+          for (const dep of deps) {
+            extractTypeByName(dep, true);
+          }
+        }
+        processing.delete(name);
+        return;
+      }
+      
+      // Check enums
+      const enumDecl = sourceFile.getEnum(name);
+      if (enumDecl) {
+        const extracted = extractEnum(enumDecl, isDependency);
+        extractedMap.set(name, extracted);
+        processing.delete(name);
+        return;
+      }
     }
     
-    // Get interfaces
-    const interfaces = sourceFile.getInterfaces();
-    for (const iface of interfaces) {
-      const name = iface.getName();
-      if (typeNames && !typeNames.includes(name)) continue;
-      if (!typeNames && !iface.isExported()) continue;
+    // Type not found in loaded files - try to resolve from imports
+    for (const sourceFile of sourceFiles) {
+      const importedFile = resolveImportedType(sourceFile, name, project);
+      if (importedFile) {
+        // The file was added to project, retry extraction
+        processing.delete(name);
+        extractTypeByName(name, isDependency);
+        return;
+      }
+    }
+    
+    processing.delete(name);
+  }
+  
+  // Extract requested types
+  if (typeNames && typeNames.length > 0) {
+    // Extract specific types
+    for (const typeName of typeNames) {
+      extractTypeByName(typeName, false);
+    }
+  } else {
+    // Extract all exported types from the source files
+    for (const sourceFile of sourceFiles) {
+      // Get type aliases
+      for (const typeAlias of sourceFile.getTypeAliases()) {
+        if (typeAlias.isExported()) {
+          extractTypeByName(typeAlias.getName(), false);
+        }
+      }
       
-      extracted.push({
-        name,
-        definition: extractInterfaceDefinition(iface),
-        source: getInterfaceSource(iface),
-      });
+      // Get interfaces
+      for (const iface of sourceFile.getInterfaces()) {
+        if (iface.isExported()) {
+          extractTypeByName(iface.getName(), false);
+        }
+      }
+      
+      // Get enums
+      for (const enumDecl of sourceFile.getEnums()) {
+        if (enumDecl.isExported()) {
+          extractTypeByName(enumDecl.getName(), false);
+        }
+      }
     }
   }
   
-  return extracted;
+  return Array.from(extractedMap.values());
+}
+
+/**
+ * Recursively add .ts files from a directory
+ */
+function addFilesRecursively(
+  dirPath: string, 
+  project: Project, 
+  sourceFiles: SourceFile[]
+): void {
+  const entries = readdirSync(dirPath, { withFileTypes: true });
+  
+  for (const entry of entries) {
+    const fullPath = join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      // Skip node_modules and hidden directories
+      if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        addFilesRecursively(fullPath, project, sourceFiles);
+      }
+    } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+      sourceFiles.push(project.addSourceFileAtPath(fullPath));
+    }
+  }
+}
+
+/**
+ * Find all type names referenced within a type declaration
+ */
+function findTypeDependencies(
+  node: TypeAliasDeclaration | InterfaceDeclaration
+): Set<string> {
+  const dependencies = new Set<string>();
+  
+  // Find all type references in the node
+  node.forEachDescendant((descendant) => {
+    if (Node.isTypeReference(descendant)) {
+      const typeName = descendant.getTypeName();
+      if (Node.isIdentifier(typeName)) {
+        const name = typeName.getText();
+        if (!BUILTIN_TYPES.has(name)) {
+          dependencies.add(name);
+        }
+      } else if (Node.isQualifiedName(typeName)) {
+        // Handle qualified names like Namespace.Type
+        const name = typeName.getRight().getText();
+        if (!BUILTIN_TYPES.has(name)) {
+          dependencies.add(name);
+        }
+      }
+    }
+  });
+  
+  return dependencies;
+}
+
+/**
+ * Try to resolve an imported type and add its source file to the project
+ */
+function resolveImportedType(
+  sourceFile: SourceFile, 
+  typeName: string,
+  project: Project
+): SourceFile | null {
+  // Find import that brings in this type
+  for (const importDecl of sourceFile.getImportDeclarations()) {
+    const namedImports = importDecl.getNamedImports();
+    const hasType = namedImports.some(ni => ni.getName() === typeName);
+    
+    if (hasType) {
+      // Resolve the module specifier to a file path
+      const moduleSpecifier = importDecl.getModuleSpecifierValue();
+      const sourceFilePath = sourceFile.getFilePath();
+      const sourceDir = dirname(sourceFilePath);
+      
+      // Try to resolve the import
+      let resolvedPath: string | null = null;
+      
+      if (moduleSpecifier.startsWith('.')) {
+        // Relative import
+        let targetPath = resolve(sourceDir, moduleSpecifier);
+        
+        // Try different extensions
+        const extensions = ['.ts', '.tsx', '/index.ts', '/index.tsx'];
+        for (const ext of extensions) {
+          const testPath = targetPath.replace(/\.(js|mjs)$/, '') + ext;
+          try {
+            if (statSync(testPath.replace(/\.js$/, '.ts')).isFile()) {
+              resolvedPath = testPath.replace(/\.js$/, '.ts');
+              break;
+            }
+          } catch {}
+          try {
+            if (statSync(testPath).isFile()) {
+              resolvedPath = testPath;
+              break;
+            }
+          } catch {}
+        }
+        
+        // Try without extension replacement
+        if (!resolvedPath) {
+          const noExt = targetPath.replace(/\.(js|mjs|ts|tsx)$/, '');
+          for (const ext of ['.ts', '.tsx']) {
+            try {
+              if (statSync(noExt + ext).isFile()) {
+                resolvedPath = noExt + ext;
+                break;
+              }
+            } catch {}
+          }
+        }
+      }
+      
+      if (resolvedPath) {
+        // Check if already in project
+        const existing = project.getSourceFile(resolvedPath);
+        if (existing) return existing;
+        
+        // Add to project
+        try {
+          return project.addSourceFileAtPath(resolvedPath);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract a type alias declaration
+ */
+function extractTypeAlias(
+  typeAlias: TypeAliasDeclaration, 
+  isDependency: boolean
+): ExtractedType {
+  const name = typeAlias.getName();
+  const typeParams = typeAlias.getTypeParameters();
+  const typeNode = typeAlias.getTypeNode();
+  
+  // Build the generic parameters text
+  let genericText = '';
+  if (typeParams.length > 0) {
+    const params = typeParams.map(p => {
+      const constraint = p.getConstraint();
+      const defaultType = p.getDefault();
+      let paramText = p.getName();
+      if (constraint) paramText += ` extends ${constraint.getText()}`;
+      if (defaultType) paramText += ` = ${defaultType.getText()}`;
+      return paramText;
+    }).join(', ');
+    genericText = `<${params}>`;
+  }
+  
+  const bodyText = typeNode ? typeNode.getText() : 'unknown';
+  const fullTypeSource = `type ${name}${genericText} = ${bodyText};`;
+  
+  return {
+    name,
+    definition: { 
+      kind: 'raw', 
+      typescript: bodyText,
+      generics: genericText || undefined,
+    },
+    source: fullTypeSource,
+    isDependency,
+  };
+}
+
+/**
+ * Extract an interface declaration
+ */
+function extractInterface(
+  iface: InterfaceDeclaration, 
+  isDependency: boolean
+): ExtractedType {
+  const name = iface.getName();
+  const typeParams = iface.getTypeParameters();
+  const properties = iface.getProperties();
+  const methods = iface.getMethods();
+  const extends_ = iface.getExtends();
+  
+  // Build interface body
+  const members: string[] = [];
+  
+  for (const prop of properties) {
+    const propName = prop.getName();
+    const questionToken = prop.hasQuestionToken() ? '?' : '';
+    const typeNode = prop.getTypeNode();
+    const typeText = typeNode ? typeNode.getText() : 'unknown';
+    members.push(`  ${propName}${questionToken}: ${typeText};`);
+  }
+  
+  for (const method of methods) {
+    members.push(`  ${method.getText()}`);
+  }
+  
+  const bodyText = `{\n${members.join('\n')}\n}`;
+  
+  // Build full interface text
+  let typeParamText = '';
+  if (typeParams.length > 0) {
+    const params = typeParams.map(p => {
+      const constraint = p.getConstraint();
+      const defaultType = p.getDefault();
+      let paramText = p.getName();
+      if (constraint) paramText += ` extends ${constraint.getText()}`;
+      if (defaultType) paramText += ` = ${defaultType.getText()}`;
+      return paramText;
+    }).join(', ');
+    typeParamText = `<${params}>`;
+  }
+  
+  let extendsText = '';
+  if (extends_.length > 0) {
+    extendsText = ` extends ${extends_.map(e => e.getText()).join(', ')}`;
+  }
+  
+  // Combine generics and extends for the full interface header
+  const headerSuffix = typeParamText + extendsText;
+  
+  return {
+    name,
+    definition: { 
+      kind: 'raw', 
+      typescript: `interface${headerSuffix} ${bodyText}`,
+      generics: headerSuffix || undefined, // Store as marker that this is a full interface
+    },
+    source: `interface ${name}${typeParamText}${extendsText} ${bodyText}`,
+    isDependency,
+  };
+}
+
+/**
+ * Extract an enum declaration
+ */
+function extractEnum(
+  enumDecl: EnumDeclaration, 
+  isDependency: boolean
+): ExtractedType {
+  const name = enumDecl.getName();
+  const members = enumDecl.getMembers();
+  
+  // Build enum body
+  const memberTexts = members.map(m => {
+    const memberName = m.getName();
+    const initializer = m.getInitializer();
+    if (initializer) {
+      return `  ${memberName} = ${initializer.getText()}`;
+    }
+    return `  ${memberName}`;
+  });
+  
+  const bodyText = `{\n${memberTexts.join(',\n')}\n}`;
+  
+  // For TypeScript declaration, convert enum to union of literal types
+  const values = members.map(m => {
+    const initializer = m.getInitializer();
+    if (initializer) {
+      return initializer.getText();
+    }
+    // For numeric enums without initializers
+    return `'${m.getName()}'`;
+  });
+  
+  const unionType = values.join(' | ');
+  
+  return {
+    name,
+    definition: { kind: 'raw', typescript: unionType },
+    source: `enum ${name} ${bodyText}`,
+    isDependency,
+  };
 }
 
 /**
@@ -157,46 +524,6 @@ export function extractTypes(options: ExtractOptions): ExtractedType[] {
  */
 export function extractFromFile(importMetaUrl: string, typeNames: string[]): ExtractedType[] {
   return extractTypes({ file: importMetaUrl, types: typeNames });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔄 TYPE CONVERSION HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-
-function extractTypeAliasDefinition(typeAlias: TypeAliasDeclaration): TypeDefinition {
-  const typeNode = typeAlias.getTypeNode();
-  if (!typeNode) {
-    return { kind: 'primitive', value: 'unknown' };
-  }
-  
-  // Get the raw TypeScript text for the type
-  const typeText = typeNode.getText();
-  return { kind: 'raw', typescript: typeText };
-}
-
-function extractInterfaceDefinition(iface: InterfaceDeclaration): TypeDefinition {
-  // Get the full interface body as raw TypeScript
-  const properties = iface.getProperties();
-  const propsText = properties.map(prop => {
-    const name = prop.getName();
-    const questionToken = prop.hasQuestionToken() ? '?' : '';
-    const typeNode = prop.getTypeNode();
-    const typeText = typeNode ? typeNode.getText() : 'unknown';
-    return `  ${name}${questionToken}: ${typeText};`;
-  }).join('\n');
-  
-  return { kind: 'raw', typescript: `{\n${propsText}\n}` };
-}
-
-function getTypeAliasSource(typeAlias: TypeAliasDeclaration): string {
-  const name = typeAlias.getName();
-  const typeNode = typeAlias.getTypeNode();
-  const typeText = typeNode ? typeNode.getText() : 'unknown';
-  return `type ${name} = ${typeText};`;
-}
-
-function getInterfaceSource(iface: InterfaceDeclaration): string {
-  return iface.getText();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -236,4 +563,3 @@ export function extractTypesAsRecord<T extends string>(
   
   return result as ExtractedTypes<T>;
 }
-

@@ -1075,6 +1075,18 @@ function typeDefinitionToTS(name: string, def: TypeDefinition): string {
     return `interface ${name} {\n${props}\n}`;
   }
   
+  // Handle raw types with generics or full declarations
+  if (def.kind === 'raw') {
+    // Check if this is a full interface declaration
+    if (def.typescript.startsWith('interface')) {
+      return `${def.typescript.replace(/^interface/, `interface ${name}`)};`;
+    }
+    // Handle type with generics
+    if (def.generics) {
+      return `type ${name}${def.generics} = ${def.typescript};`;
+    }
+  }
+  
   return `type ${name} = ${typeDefToTSType(def)};`;
 }
 
