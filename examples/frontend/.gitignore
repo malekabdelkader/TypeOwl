@@ -4,9 +4,10 @@ node_modules/
 # Build output
 dist/
 
-# TypeOwl generated types (fetched from backend)
-.typeowl/
+# TypeOwl cache (not needed in repo)
 .typeowl-cache/
+
+# Note: .typeowl/ IS committed (contains generated types for CI builds)
 
 # Vite
 *.local

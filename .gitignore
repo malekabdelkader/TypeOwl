@@ -7,7 +7,9 @@ dist/
 # TypeOwl generated (should be gitignored in projects using TypeOwl)
 .typeowl/
 .typeowl-cache/
-examples/frontend/.typeowl/
+
+# But allow examples/frontend/.typeowl/ for CI builds
+!examples/frontend/.typeowl/
 examples/frontend/.typeowl-cache/
 
 # OS

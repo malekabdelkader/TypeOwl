@@ -8,7 +8,7 @@
     "dev:watch": "concurrently \"npm run typeowl:watch\" \"vite\"",
     "typeowl:sync": "tsx scripts/sync-types.ts",
     "typeowl:watch": "tsx scripts/sync-types.ts --watch",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "build:local": "npm run typeowl:sync && npm run build",
     "preview": "vite preview"
   },
