@@ -53,7 +53,11 @@ export default function App() {
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '2rem', flex: 1 }}>
       {/* Header */}
       <header style={{ marginBottom: '3rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🦉</div>
+        <img 
+          src="/typeOwl.logo.png" 
+          alt="TypeOwl Logo" 
+          style={{ width: 80, height: 80, marginBottom: '0.5rem' }} 
+        />
         <h1 style={{ 
           fontSize: '2rem', 
           fontWeight: 700,

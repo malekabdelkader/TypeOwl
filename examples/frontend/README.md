@@ -1,4 +1,8 @@
-# 🦉 TypeOwl Example Frontend
+<p align="center">
+  <img src="./public/typeOwl.logo.png" alt="TypeOwl Logo" width="120" />
+</p>
+
+# TypeOwl Example Frontend
 
 A React + Vite app that syncs types from the backend using TypeOwl.
 

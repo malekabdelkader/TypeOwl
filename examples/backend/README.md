@@ -1,4 +1,8 @@
-# 🦉 TypeOwl Example Backend
+<p align="center">
+  <img src="../frontend/public/typeOwl.logo.png" alt="TypeOwl Logo" width="120" />
+</p>
+
+# TypeOwl Example Backend
 
 A Fastify API server that exposes types via TypeOwl.
 

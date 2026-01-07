@@ -1,6 +1,21 @@
-# 🦉 TypeOwl
+<p align="center">
+  <img src="examples/frontend/public/typeOwl.logo.png" alt="TypeOwl Logo" width="180" />
+</p>
 
-> Runtime type synchronization between backend and frontend — types that fly across repos.
+<h1 align="center">TypeOwl</h1>
+
+<p align="center">
+  <em>Runtime type synchronization between backend and frontend — types that fly across repos.</em>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#three-ways-to-define-types">Type Definition Options</a> •
+  <a href="#features">Features</a> •
+  <a href="#examples">Examples</a>
+</p>
+
+---
 
 TypeOwl solves the **multi-repo type sharing problem**. When your backend and frontend live in separate repositories (or are managed by different teams), TypeOwl lets types travel over HTTP during development.
 
@@ -62,6 +77,7 @@ npm install zod
 ```typescript
 // typeowl.server.config.ts
 import { defineServerConfig } from 'typeowl/server';
+import type { FastifyInstance } from 'fastify';
 
 export default defineServerConfig({
   version: '1.0.0',
@@ -73,15 +89,32 @@ export default defineServerConfig({
   extract: {
     content: {
       from: './src/types/',
-      types: ['Blog', 'Product'],
+      types: '*',  // Extract ALL exported types, or specify: ['Blog', 'Product']
     },
   },
   
+  // Dynamic mode: serve types at runtime
+  mode: 'dynamic',
+  
   // Register TypeOwl routes (framework-specific)
-  registerRoutes: (app, typeowl) => {
-    // For Fastify:
-    app.get('/__typeowl', (req, reply) => { /* ... */ });
-    app.get('/__typeowl/*', (req, reply) => { /* ... */ });
+  registerRoutes: (appInstance, typeowl, config) => {
+    const app = appInstance as FastifyInstance;
+    const basePath = typeowl.getBasePath();
+
+    // Manifest endpoint
+    app.get(basePath, async (request, reply) => {
+      const response = typeowl.handleRequest(basePath);
+      if (response) return reply.type(response.contentType).send(response.body);
+      return reply.code(404).send({ error: 'Not found' });
+    });
+
+    // Type files endpoint
+    app.get(`${basePath}/types/:file`, async (request, reply) => {
+      const { file } = request.params as { file: string };
+      const response = typeowl.handleRequest(`${basePath}/types/${file}`);
+      if (response) return reply.type(response.contentType).send(response.body);
+      return reply.code(404).send({ error: 'Not found' });
+    });
   },
 });
 ```
@@ -99,7 +132,7 @@ const typeowl = await initTypeOwl();
 
 const app = Fastify();
 
-// Mount TypeOwl routes
+// Mount TypeOwl routes (uses registerRoutes from config)
 await typeowl.mount(app);
 
 // Define schemas
@@ -123,6 +156,11 @@ typeowl.endpoint(app, 'POST', '/api/users', {
   return createUser(body);
 });
 
+// You can also reference extracted types by name!
+typeowl.endpoint(app, 'GET', '/api/products', {
+  response: 'Product[]',  // References Product from extract config
+}, async () => products);
+
 app.listen({ port: 3001 });
 ```
 
@@ -135,11 +173,14 @@ app.listen({ port: 3001 });
 import { defineConfig } from 'typeowl';
 
 export default defineConfig({
-  resolvers: {
-    name: 'api',
-    source: 'http://localhost:3001/__typeowl',
-  },
+  resolvers: [
+    {
+      name: 'api',
+      source: 'http://localhost:3001/__typeowl',
+    },
+  ],
   output: './.typeowl',
+  cache: './.typeowl-cache',
 });
 ```
 
@@ -147,9 +188,17 @@ export default defineConfig({
 
 ```typescript
 // scripts/sync-types.ts
-import { loadConfigAndSync } from 'typeowl';
+import { syncFromConfig, watchFromConfig } from 'typeowl/client';
+import config from '../typeowl.config.js';
 
-await loadConfigAndSync();
+const args = process.argv.slice(2);
+const watchMode = args.includes('--watch');
+
+if (watchMode) {
+  await watchFromConfig({ ...config, watch: 5000 });
+} else {
+  await syncFromConfig(config);
+}
 ```
 
 **3. Add to package.json:**
@@ -158,7 +207,9 @@ await loadConfigAndSync();
 {
   "scripts": {
     "dev": "npm run typeowl:sync && vite",
-    "typeowl:sync": "tsx scripts/sync-types.ts"
+    "dev:watch": "concurrently \"npm run typeowl:watch\" \"vite\"",
+    "typeowl:sync": "tsx scripts/sync-types.ts",
+    "typeowl:watch": "tsx scripts/sync-types.ts --watch"
   }
 }
 ```
@@ -170,7 +221,8 @@ await loadConfigAndSync();
 {
   "compilerOptions": {
     "paths": {
-      "@typeowl": ["./.typeowl/index.d.ts"]
+      "@typeowl": ["./.typeowl/index.d.ts"],
+      "@typeowl/*": ["./.typeowl/*"]
     }
   }
 }
@@ -179,7 +231,7 @@ await loadConfigAndSync();
 **5. Use in your frontend:**
 
 ```typescript
-import type { User, Blog, ApiEndpoints } from '@typeowl';
+import type { User, Blog, Product, ApiEndpoints } from '@typeowl';
 
 // Full autocomplete and type safety! ✨
 const users: User[] = await fetch('/api/users').then(r => r.json());
@@ -213,7 +265,10 @@ export type Blog = {
 
 // typeowl.server.config.ts
 extract: {
-  content: { from: './src/types/', types: ['Blog'] },
+  content: { 
+    from: './src/types/', 
+    types: '*',  // Extract all, or specify: ['Blog', 'Product']
+  },
 }
 
 // Frontend: Force-cast with exposed type
@@ -225,6 +280,7 @@ const blogs = await fetch('/api/blogs').then(r => r.json()) as Blog[];
 
 ```typescript
 // Backend: Auto-validates AND registers types
+// With Zod schemas:
 typeowl.endpoint(app, 'GET', '/api/users', {
   response: z.array(UserSchema),
 }, async () => users);
@@ -237,6 +293,11 @@ typeowl.endpoint(app, 'POST', '/api/users', {
   return createUser(body);
 });
 
+// Or with type references (no Zod needed for response):
+typeowl.endpoint(app, 'GET', '/api/products', {
+  response: 'Product[]',  // References extracted type
+}, async () => products);
+
 // Frontend: Fully typed ApiEndpoints
 import type { ApiEndpoints } from '@typeowl';
 // ApiEndpoints['GET /api/users'] = { response: User[] }
@@ -245,7 +306,7 @@ import type { ApiEndpoints } from '@typeowl';
 
 ## Building a Typed API Client
 
-Use the generated `ApiEndpoints` to build an axios-like client:
+Use the generated `ApiEndpoints` to build a fully typed fetch wrapper:
 
 ```typescript
 // api/client.ts
@@ -287,6 +348,7 @@ const user = await api.post('/api/users', { name: 'John', email: 'john@example.c
 - 🗺️ **Endpoint mapping** — Full type safety for API calls via `ApiEndpoints`
 - ✅ **Runtime validation** — `typeowl.endpoint()` validates with Zod (optional)
 - 📁 **Static type extraction** — Extract types directly from `.ts` files (no Zod needed!)
+- 🔀 **Mixed mode** — Use Zod for body validation, type references for responses
 - 💾 **Offline cache** — Works when backend is down
 - 👀 **Watch mode** — Auto-refresh on changes
 - 🔒 **Guard config** — Protect TypeOwl endpoints with API keys
@@ -296,10 +358,11 @@ const user = await api.post('/api/users', { name: 'John', email: 'john@example.c
 | Feature | Requires Zod? |
 |---------|---------------|
 | Static type extraction (`extract` config) | ❌ No |
+| `typeowl.endpoint()` with type references | ❌ No |
 | `registerType()`, `registerObject()` | ❌ No |
 | Client-side type sync | ❌ No |
 | `registerZod()` | ✅ Yes |
-| `typeowl.endpoint()` (auto-validation) | ✅ Yes |
+| `typeowl.endpoint()` with Zod schemas (validation) | ✅ Yes |
 
 ## Server Configuration
 
@@ -322,12 +385,14 @@ export default defineServerConfig({
   
   // Static type extraction
   extract: {
-    content: { from: './src/types/', types: ['Blog', 'Product'] },
-    models: { from: './src/models/', types: ['User', 'Order'] },
+    content: { from: './src/types/', types: '*' },  // All types
+    models: { from: './src/models/', types: ['User', 'Order'] },  // Specific types
   },
   
-  // Dynamic mode: register HTTP routes
-  mode: 'dynamic',
+  // Serving mode
+  mode: 'dynamic',  // 'dynamic' (runtime) or 'static' (CLI generated)
+  
+  // Register HTTP routes (required for dynamic mode)
   registerRoutes: (app, typeowl, config) => {
     // Your framework-specific route registration
   },
@@ -347,10 +412,16 @@ export default defineServerConfig({
 import { defineConfig } from 'typeowl';
 
 export default defineConfig({
-  // Single backend
+  // Single backend (shorthand)
   resolvers: 'http://localhost:3001/__typeowl',
   
-  // Or multiple backends
+  // Or named resolver
+  resolvers: {
+    name: 'api',
+    source: 'http://localhost:3001/__typeowl',
+  },
+  
+  // Or multiple backends (microservices)
   resolvers: [
     { name: 'api', source: 'http://localhost:3001/__typeowl' },
     { name: 'auth', source: 'http://localhost:3002/__typeowl' },
@@ -362,13 +433,19 @@ export default defineConfig({
   // Cache for offline fallback
   cache: './.typeowl-cache',
   
-  // Watch mode (poll interval in ms)
+  // Watch mode (poll interval in ms, or true for 5000ms)
   watch: 5000,
   
-  // Request hooks
-  headers: { 'X-TypeOwl-Key': 'my-api-key' },
-  onRequest: (url, init) => init,
-  onResponse: (response) => response,
+  // Lifecycle hooks
+  hooks: {
+    beforeSync: () => console.log('Starting sync...'),
+    afterResolverSync: (resolver, result) => {
+      console.log(`${resolver}: v${result.version}`);
+    },
+    afterSync: (results) => {
+      console.log('Sync complete!');
+    },
+  },
 });
 ```
 
