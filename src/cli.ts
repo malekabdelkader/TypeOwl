@@ -8,8 +8,15 @@
  *   typeowl generate - Generate static type files (SERVER-SIDE)
  */
 
-import { resolve } from 'node:path';
-import { existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+// Get version from package.json
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkgPath = resolve(__dirname, '../package.json');
+const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+const VERSION = pkg.version;
 
 // Colors
 const c = {
@@ -26,8 +33,6 @@ const c = {
   brightCyan: '\x1b[96m',
   white: '\x1b[97m',
 };
-
-const VERSION = '0.1.0-beta.2';
 
 // ASCII Art Logo - Owl with lightning bolt
 function printLogo(subtitle?: string) {
@@ -295,7 +300,7 @@ async function main() {
     process.exit(0);
   }
   
-  if (flags.includes('--version')) {
+  if (flags.includes('--version') || flags.includes('-v')) {
     console.log(`typeowl v${VERSION}`);
     process.exit(0);
   }

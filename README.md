@@ -9,7 +9,20 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/typeowl"><img src="https://img.shields.io/npm/v/typeowl.svg?style=flat-square&color=f59e0b" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/typeowl"><img src="https://img.shields.io/npm/dm/typeowl.svg?style=flat-square&color=10b981" alt="npm downloads"></a>
+  <a href="https://github.com/malekelkader/typeowl/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/typeowl.svg?style=flat-square&color=94a1b2" alt="license"></a>
+  <a href="https://typeowl.netlify.app"><img src="https://img.shields.io/badge/docs-typeowl.netlify.app-blue?style=flat-square" alt="documentation"></a>
+</p>
+
+<p align="center">
   <strong>⚠️ Experimental</strong> — API may change before v1.0
+</p>
+
+<p align="center">
+  <a href="https://typeowl.netlify.app">📚 Documentation</a> •
+  <a href="https://www.npmjs.com/package/typeowl">📦 NPM Package</a> •
+  <a href="https://github.com/malekelkader/typeowl">🐙 GitHub</a>
 </p>
 
 <p align="center">
@@ -188,21 +201,17 @@ export default defineConfig({
 });
 ```
 
-**2. Create sync script:**
+**2. Sync types using CLI:**
 
-```typescript
-// scripts/sync-types.ts
-import { syncFromConfig, watchFromConfig } from 'typeowl/client';
-import config from '../typeowl.config.js';
+```bash
+# One-time sync
+npx typeowl sync
 
-const args = process.argv.slice(2);
-const watchMode = args.includes('--watch');
+# Watch mode (polls every 5 seconds by default)
+npx typeowl watch
 
-if (watchMode) {
-  await watchFromConfig({ ...config, watch: 5000 });
-} else {
-  await syncFromConfig(config);
-}
+# Watch with custom interval (in seconds)
+npx typeowl watch --interval 10
 ```
 
 **3. Add to package.json:**
@@ -210,10 +219,8 @@ if (watchMode) {
 ```json
 {
   "scripts": {
-    "dev": "npm run typeowl:sync && vite",
-    "dev:watch": "concurrently \"npm run typeowl:watch\" \"vite\"",
-    "typeowl:sync": "tsx scripts/sync-types.ts",
-    "typeowl:watch": "tsx scripts/sync-types.ts --watch"
+    "dev": "npx typeowl sync && vite",
+    "dev:watch": "concurrently \"npx typeowl watch\" \"vite\""
   }
 }
 ```
@@ -486,7 +493,7 @@ npm run dev
 
 ## Roadmap
 
-- [ ] CLI tool (`npx typeowl sync`)
+- [x] CLI tool (`npx typeowl sync`, `npx typeowl watch`, `npx typeowl generate`)
 - [ ] Named endpoints (config-based mapper)
 - [ ] Vite/Webpack plugins
 - [ ] Database schema integration (Prisma, Drizzle)

@@ -458,7 +458,7 @@
         <li><a href="/docs/index.html" class="active">Documentation</a></li>
         <li><a href="/engine/index.html">How It Works</a></li>
         <li><a href="/examples.html">Examples</a></li>
-        <li><a href="https://github.com/typeowl/typeowl" target="_blank">GitHub</a></li>
+        <li><a href="https://github.com/malekelkader/typeowl" target="_blank">GitHub</a></li>
       </ul>
     </div>
   </nav>
@@ -568,15 +568,20 @@ npm install zod</div>
 <span class="keyword">await</span> typeowl.<span class="function">mount</span>(app);</div>
       </div>
 
-      <h3>3. Frontend: Sync types</h3>
+      <h3>3. Frontend: Sync types using CLI</h3>
       <div class="code-block">
         <div class="code-header">
-          <span class="filename">scripts/sync-types.ts</span>
+          <span class="filename">terminal</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('npx typeowl sync')">Copy</button>
         </div>
-        <div class="code-content"><span class="keyword">import</span> { <span class="function">syncFromConfig</span> } <span class="keyword">from</span> <span class="string">'typeowl/client'</span>;
-<span class="keyword">import</span> config <span class="keyword">from</span> <span class="string">'../typeowl.config.js'</span>;
+        <div class="code-content"><span class="comment"># One-time sync from backend</span>
+npx typeowl sync
 
-<span class="keyword">await</span> <span class="function">syncFromConfig</span>(config);</div>
+<span class="comment"># Watch mode (polls every 5 seconds by default)</span>
+npx typeowl watch
+
+<span class="comment"># Watch with custom interval (30 seconds)</span>
+npx typeowl watch -i 30</div>
       </div>
 
       <h2 id="project-structure">Project Structure</h2>
@@ -605,12 +610,6 @@ npm install zod</div>
           <div class="file-tree-root">📁 frontend/</div>
           <ul>
             <li><span class="file">typeowl.config.ts</span> <span class="desc">Client config</span></li>
-            <li>
-              <span class="folder">scripts/</span>
-              <ul>
-                <li><span class="file">sync-types.ts</span> <span class="desc">Sync script</span></li>
-              </ul>
-            </li>
             <li>
               <span class="folder">.typeowl/</span> <span class="desc">Generated types (gitignore)</span>
               <ul>
@@ -759,7 +758,24 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</
       </div>
 
       <h2 id="syncing">Syncing Types</h2>
-      <p>Add sync scripts to your <code>package.json</code>:</p>
+      <p>Use the TypeOwl CLI to sync types from your backend:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">terminal</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('npx typeowl sync')">Copy</button>
+        </div>
+        <div class="code-content"><span class="comment"># One-time sync (run before build)</span>
+npx typeowl sync
+
+<span class="comment"># Watch mode for development</span>
+npx typeowl watch
+
+<span class="comment"># Watch with custom interval (e.g., 30 seconds)</span>
+npx typeowl watch --interval 30</div>
+      </div>
+
+      <p>Add CLI commands to your <code>package.json</code>:</p>
 
       <div class="code-block">
         <div class="code-header">
@@ -767,11 +783,20 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</
         </div>
         <div class="code-content">{
   "scripts": {
-    "dev": "npm run typeowl:sync && vite",
-    "typeowl:sync": "tsx scripts/sync-types.ts",
-    "typeowl:watch": "tsx scripts/sync-types.ts --watch"
+    "dev": "npx typeowl sync && vite",
+    "dev:watch": "concurrently \"npx typeowl watch\" \"vite\"",
+    "build": "npx typeowl sync && tsc && vite build"
   }
 }</div>
+      </div>
+      
+      <div class="callout callout-info">
+        <strong>💡 CLI Commands</strong>
+        <ul>
+          <li><code>typeowl sync</code> — [CLIENT] One-time sync from remote backend</li>
+          <li><code>typeowl watch</code> — [CLIENT] Continuously poll for type changes</li>
+          <li><code>typeowl generate</code> — [SERVER] Pre-generate static types</li>
+        </ul>
       </div>
 
       <h2 id="using-types">Using Types</h2>
@@ -835,20 +860,27 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</
       </div>
 
       <h2 id="watch-mode">Watch Mode</h2>
-      <p>Auto-sync types during development:</p>
+      <p>Auto-sync types during development using the CLI:</p>
 
       <div class="code-block">
         <div class="code-header">
           <span class="filename">terminal</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('npx typeowl watch')">Copy</button>
         </div>
-        <div class="code-content"><span class="comment"># Polls for changes every 5 seconds</span>
-npm run typeowl:watch</div>
+        <div class="code-content"><span class="comment"># Default: polls every 5 seconds</span>
+npx typeowl watch
+
+<span class="comment"># Custom interval (10 seconds)</span>
+npx typeowl watch -i 10
+
+<span class="comment"># Longer interval (1 minute)</span>
+npx typeowl watch --interval 60</div>
       </div>
 
       <div class="callout callout-warning">
         <strong>⚡ Pro Tip</strong>
         Use <code>concurrently</code> to run watch mode alongside your dev server:
-        <code>"dev:watch": "concurrently \"npm run typeowl:watch\" \"vite\""</code>
+        <code>"dev:watch": "concurrently \"npx typeowl watch\" \"vite\""</code>
       </div>
 
     </main>
