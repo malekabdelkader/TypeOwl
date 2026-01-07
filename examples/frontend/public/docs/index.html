@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Primary Meta Tags -->
+  <title>Documentation - TypeOwl</title>
+  <meta name="title" content="Documentation - TypeOwl">
+  <meta name="description" content="Complete guide to setting up TypeOwl for type synchronization between your backend and frontend. Installation, configuration, and API reference.">
+  <meta name="keywords" content="TypeOwl documentation, TypeScript types, API documentation, setup guide">
+  <meta name="robots" content="index, follow">
+  
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://typeowl.dev/docs/">
+  <meta property="og:title" content="Documentation - TypeOwl">
+  <meta property="og:description" content="Complete guide to setting up TypeOwl for type synchronization.">
+  <meta property="og:image" content="/typeOwl.logo.png">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/owl.svg">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-primary: #0a0a0b;
+      --bg-secondary: #111113;
+      --bg-tertiary: #1a1a1d;
+      --bg-card: #16161a;
+      --text-primary: #fffffe;
+      --text-secondary: #94a1b2;
+      --text-muted: #72757e;
+      --accent: #f59e0b;
+      --accent-glow: rgba(245, 158, 11, 0.15);
+      --accent-hover: #fbbf24;
+      --success: #10b981;
+      --error: #ef4444;
+      --border: #2e2e32;
+      --radius: 16px;
+      --radius-sm: 8px;
+      --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.7;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1rem 2rem;
+      background: rgba(10, 10, 11, 0.9);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-primary);
+      font-weight: 600;
+      font-size: 1.25rem;
+    }
+
+    .nav-logo img { width: 36px; height: 36px; }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover, .nav-links a.active { color: var(--accent); }
+
+    /* Layout */
+    .layout {
+      display: flex;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding-top: 70px;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      padding: 2rem 1.5rem;
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 70px;
+      height: calc(100vh - 70px);
+      overflow-y: auto;
+    }
+
+    .sidebar-section {
+      margin-bottom: 2rem;
+    }
+
+    .sidebar-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    .sidebar-links {
+      list-style: none;
+    }
+
+    .sidebar-links a {
+      display: block;
+      padding: 0.5rem 0.75rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      border-radius: var(--radius-sm);
+      transition: all 0.2s;
+      margin-bottom: 0.25rem;
+    }
+
+    .sidebar-links a:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .sidebar-links a.active {
+      background: var(--accent-glow);
+      color: var(--accent);
+      border-left: 2px solid var(--accent);
+    }
+
+    /* Main Content */
+    .content {
+      flex: 1;
+      padding: 3rem 4rem;
+      max-width: 900px;
+    }
+
+    .content h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .content .subtitle {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      margin-bottom: 3rem;
+    }
+
+    .content h2 {
+      font-size: 1.75rem;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .content h2:first-of-type {
+      border-top: none;
+      padding-top: 0;
+      margin-top: 0;
+    }
+
+    .content h3 {
+      font-size: 1.25rem;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      color: var(--accent);
+    }
+
+    .content p {
+      margin-bottom: 1rem;
+      color: var(--text-secondary);
+    }
+
+    .content ul, .content ol {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+      color: var(--text-secondary);
+    }
+
+    .content li {
+      margin-bottom: 0.5rem;
+    }
+
+    .content code {
+      font-family: var(--font-mono);
+      background: var(--bg-tertiary);
+      padding: 0.2em 0.4em;
+      border-radius: 4px;
+      font-size: 0.9em;
+      color: var(--accent);
+    }
+
+    .content a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .content a:hover {
+      text-decoration: underline;
+    }
+
+    /* Code blocks */
+    .code-block {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 1.5rem 0;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .code-header .filename {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .code-header .copy-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .code-header .copy-btn:hover {
+      background: var(--bg-card);
+      color: var(--accent);
+    }
+
+    .code-content {
+      padding: 1.25rem 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      line-height: 1.8;
+      overflow-x: auto;
+      color: var(--text-secondary);
+    }
+
+    .code-content .keyword { color: #c678dd; }
+    .code-content .type { color: #e5c07b; }
+    .code-content .string { color: #98c379; }
+    .code-content .comment { color: var(--text-muted); font-style: italic; }
+    .code-content .function { color: #61afef; }
+
+    /* File Tree */
+    .file-tree {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+    }
+
+    .file-tree-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .file-tree-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .file-tree-root {
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    .file-tree ul {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+    }
+
+    .file-tree li {
+      position: relative;
+      padding-left: 1.5rem;
+      padding-top: 0.25rem;
+      padding-bottom: 0.25rem;
+      color: var(--text-secondary);
+    }
+
+    .file-tree li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 50%;
+      width: 1rem;
+      border-left: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .file-tree li:last-child::before {
+      border-left: 1px solid var(--border);
+    }
+
+    .file-tree li::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      bottom: 0;
+      border-left: 1px solid var(--border);
+    }
+
+    .file-tree li:last-child::after {
+      display: none;
+    }
+
+    .file-tree .folder {
+      color: var(--accent);
+    }
+
+    .file-tree .file {
+      color: var(--text-secondary);
+    }
+
+    .file-tree .desc {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      margin-left: 0.5rem;
+    }
+
+    .file-tree ul ul {
+      padding-left: 1rem;
+    }
+
+    /* Callout boxes */
+    .callout {
+      padding: 1rem 1.25rem;
+      border-radius: var(--radius-sm);
+      margin: 1.5rem 0;
+      border-left: 3px solid;
+    }
+
+    .callout-info {
+      background: rgba(59, 130, 246, 0.1);
+      border-color: #3b82f6;
+    }
+
+    .callout-warning {
+      background: rgba(245, 158, 11, 0.1);
+      border-color: var(--accent);
+    }
+
+    .callout-success {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: var(--success);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+    }
+
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--bg-tertiary);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    td {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .content { padding: 2rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav>
+    <div class="nav-content">
+      <a href="/" class="nav-logo">
+        <img src="/typeOwl.logo.png" alt="TypeOwl">
+        <span>TypeOwl</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="/docs/index.html" class="active">Documentation</a></li>
+        <li><a href="/engine/index.html">How It Works</a></li>
+        <li><a href="/examples.html">Examples</a></li>
+        <li><a href="https://github.com/typeowl/typeowl" target="_blank">GitHub</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">Getting Started</div>
+        <ul class="sidebar-links">
+          <li><a href="#installation" class="active">Installation</a></li>
+          <li><a href="#quick-start">Quick Start</a></li>
+          <li><a href="#project-structure">Project Structure</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-title">Backend</div>
+        <ul class="sidebar-links">
+          <li><a href="#server-config">Server Config</a></li>
+          <li><a href="#type-extraction">Type Extraction</a></li>
+          <li><a href="#endpoints">Endpoint Registration</a></li>
+          <li><a href="#zod-validation">Zod Validation</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-title">Frontend</div>
+        <ul class="sidebar-links">
+          <li><a href="#client-config">Client Config</a></li>
+          <li><a href="#syncing">Syncing Types</a></li>
+          <li><a href="#using-types">Using Types</a></li>
+          <li><a href="#api-client">API Client</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-title">Advanced</div>
+        <ul class="sidebar-links">
+          <li><a href="#multi-backend">Multiple Backends</a></li>
+          <li><a href="#security">Security</a></li>
+          <li><a href="#watch-mode">Watch Mode</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="content">
+      <h1>Documentation</h1>
+      <p class="subtitle">Everything you need to set up TypeOwl in your project.</p>
+
+      <h2 id="installation">Installation</h2>
+      <p>Install TypeOwl in both your backend and frontend projects:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">terminal</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('npm install typeowl')">Copy</button>
+        </div>
+        <div class="code-content">npm install typeowl
+
+<span class="comment"># Optional: Install Zod for runtime validation</span>
+npm install zod</div>
+      </div>
+
+      <div class="callout callout-info">
+        <strong>💡 Zod is optional!</strong>
+        You can use TypeOwl without Zod for static type extraction. Zod is only needed for <code>typeowl.endpoint()</code> runtime validation.
+      </div>
+
+      <h2 id="quick-start">Quick Start</h2>
+      <p>Get TypeOwl running in 3 steps:</p>
+
+      <h3>1. Backend: Create config file</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">typeowl.server.config.ts</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> { <span class="function">defineServerConfig</span> } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
+
+<span class="keyword">export default</span> <span class="function">defineServerConfig</span>({
+  version: <span class="string">'1.0.0'</span>,
+  typeSources: <span class="string">'./src/types/'</span>,
+  
+  extract: {
+    content: {
+      from: <span class="string">'./src/types/'</span>,
+      types: <span class="string">'*'</span>,  <span class="comment">// Extract all types</span>
+    },
+  },
+  
+  mode: <span class="string">'dynamic'</span>,
+  registerRoutes: (app, typeowl) => {
+    <span class="comment">// Your route registration...</span>
+  },
+});</div>
+      </div>
+
+      <h3>2. Backend: Initialize and mount</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">server.ts</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> { <span class="function">initTypeOwl</span> } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
+
+<span class="keyword">const</span> typeowl = <span class="keyword">await</span> <span class="function">initTypeOwl</span>();
+<span class="keyword">await</span> typeowl.<span class="function">mount</span>(app);</div>
+      </div>
+
+      <h3>3. Frontend: Sync types</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">scripts/sync-types.ts</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> { <span class="function">syncFromConfig</span> } <span class="keyword">from</span> <span class="string">'typeowl/client'</span>;
+<span class="keyword">import</span> config <span class="keyword">from</span> <span class="string">'../typeowl.config.js'</span>;
+
+<span class="keyword">await</span> <span class="function">syncFromConfig</span>(config);</div>
+      </div>
+
+      <h2 id="project-structure">Project Structure</h2>
+      <div class="file-tree">
+        <div class="file-tree-section">
+          <div class="file-tree-root">📁 backend/</div>
+          <ul>
+            <li><span class="file">typeowl.server.config.ts</span> <span class="desc">Server config</span></li>
+            <li>
+              <span class="folder">src/</span>
+              <ul>
+                <li><span class="file">server.ts</span> <span class="desc">Main server file</span></li>
+                <li>
+                  <span class="folder">types/</span>
+                  <ul>
+                    <li><span class="file">User.ts</span> <span class="desc">Type definitions</span></li>
+                    <li><span class="file">Blog.ts</span></li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+        
+        <div class="file-tree-section">
+          <div class="file-tree-root">📁 frontend/</div>
+          <ul>
+            <li><span class="file">typeowl.config.ts</span> <span class="desc">Client config</span></li>
+            <li>
+              <span class="folder">scripts/</span>
+              <ul>
+                <li><span class="file">sync-types.ts</span> <span class="desc">Sync script</span></li>
+              </ul>
+            </li>
+            <li>
+              <span class="folder">.typeowl/</span> <span class="desc">Generated types (gitignore)</span>
+              <ul>
+                <li><span class="file">index.d.ts</span></li>
+                <li><span class="file">content.d.ts</span></li>
+                <li><span class="file">endpoints.d.ts</span></li>
+              </ul>
+            </li>
+            <li>
+              <span class="folder">src/</span>
+              <ul>
+                <li>
+                  <span class="folder">api/</span>
+                  <ul>
+                    <li><span class="file">client.ts</span> <span class="desc">Type-safe API client</span></li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <h2 id="server-config">Server Configuration</h2>
+      <p>The <code>typeowl.server.config.ts</code> file controls how types are extracted and served:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Option</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>version</code></td>
+            <td>string</td>
+            <td>Version string for cache invalidation</td>
+          </tr>
+          <tr>
+            <td><code>basePath</code></td>
+            <td>string</td>
+            <td>Base URL path (default: <code>/__typeowl</code>)</td>
+          </tr>
+          <tr>
+            <td><code>typeSources</code></td>
+            <td>string | string[]</td>
+            <td>Allowed paths for type extraction (security)</td>
+          </tr>
+          <tr>
+            <td><code>extract</code></td>
+            <td>object</td>
+            <td>Type extraction configuration per domain</td>
+          </tr>
+          <tr>
+            <td><code>mode</code></td>
+            <td>'dynamic' | 'static'</td>
+            <td>How types are served</td>
+          </tr>
+          <tr>
+            <td><code>guard</code></td>
+            <td>object</td>
+            <td>Security settings (API key, environment)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="type-extraction">Type Extraction</h2>
+      <p>TypeOwl can extract types directly from your TypeScript files:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">typeowl.server.config.ts</span>
+        </div>
+        <div class="code-content">extract: {
+  <span class="comment">// Domain name → file configuration</span>
+  content: {
+    from: <span class="string">'./src/types/'</span>,
+    types: <span class="string">'*'</span>,  <span class="comment">// All exported types</span>
+  },
+  
+  models: {
+    from: <span class="string">'./src/models/'</span>,
+    types: [<span class="string">'User'</span>, <span class="string">'Order'</span>],  <span class="comment">// Specific types only</span>
+  },
+}</div>
+      </div>
+
+      <h2 id="endpoints">Endpoint Registration</h2>
+      <p>Use <code>typeowl.endpoint()</code> to register API routes with type safety:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">server.ts</span>
+        </div>
+        <div class="code-content"><span class="comment">// With Zod schemas (runtime validation)</span>
+typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'</span>, <span class="string">'/api/users'</span>, {
+  body: CreateUserSchema,
+  response: UserSchema,
+}, <span class="keyword">async</span> ({ body }) => {
+  <span class="comment">// body is validated and typed!</span>
+  <span class="keyword">return</span> createUser(body);
+});
+
+<span class="comment">// With type references (no Zod needed)</span>
+typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</span>, <span class="string">'/api/products'</span>, {
+  response: <span class="string">'Product[]'</span>,  <span class="comment">// References extracted type</span>
+}, <span class="keyword">async</span> () => products);</div>
+      </div>
+
+      <h2 id="zod-validation">Zod Validation</h2>
+      <p>When you provide Zod schemas, TypeOwl automatically validates requests:</p>
+
+      <ul>
+        <li><strong>body</strong> — Validated before handler runs</li>
+        <li><strong>params</strong> — URL parameters validated</li>
+        <li><strong>query</strong> — Query string validated</li>
+        <li><strong>response</strong> — Validated in development mode</li>
+      </ul>
+
+      <div class="callout callout-success">
+        <strong>✅ Best Practice</strong>
+        Use Zod for body/params validation, and type references for responses. This gives you validation where it matters most (user input) without runtime overhead for responses.
+      </div>
+
+      <h2 id="client-config">Client Configuration</h2>
+      <p>Configure where to fetch types from:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">typeowl.config.ts</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> { <span class="function">defineConfig</span> } <span class="keyword">from</span> <span class="string">'typeowl'</span>;
+
+<span class="keyword">export default</span> <span class="function">defineConfig</span>({
+  resolvers: [
+    {
+      name: <span class="string">'api'</span>,
+      source: <span class="string">'http://localhost:3001/__typeowl'</span>,
+    },
+  ],
+  output: <span class="string">'./.typeowl'</span>,
+  cache: <span class="string">'./.typeowl-cache'</span>,
+});</div>
+      </div>
+
+      <h2 id="syncing">Syncing Types</h2>
+      <p>Add sync scripts to your <code>package.json</code>:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">package.json</span>
+        </div>
+        <div class="code-content">{
+  "scripts": {
+    "dev": "npm run typeowl:sync && vite",
+    "typeowl:sync": "tsx scripts/sync-types.ts",
+    "typeowl:watch": "tsx scripts/sync-types.ts --watch"
+  }
+}</div>
+      </div>
+
+      <h2 id="using-types">Using Types</h2>
+      <p>Import synced types in your frontend:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">src/App.tsx</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> <span class="keyword">type</span> { <span class="type">User</span>, <span class="type">Blog</span>, <span class="type">ApiEndpoints</span> } <span class="keyword">from</span> <span class="string">'@typeowl'</span>;
+
+<span class="comment">// Full autocomplete! ✨</span>
+<span class="keyword">const</span> users: <span class="type">User</span>[] = <span class="keyword">await</span> fetch(<span class="string">'/api/users'</span>).then(r => r.json());</div>
+      </div>
+
+      <h2 id="api-client">Building an API Client</h2>
+      <p>Create a fully typed API client using the generated <code>ApiEndpoints</code>:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">src/api/client.ts</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> <span class="keyword">type</span> { <span class="type">ApiEndpoints</span> } <span class="keyword">from</span> <span class="string">'@typeowl'</span>;
+
+<span class="keyword">type</span> <span class="type">GetPath</span> = <span class="type">ExtractPaths</span>&lt;<span class="string">'GET'</span>&gt;;
+
+<span class="keyword">export const</span> api = {
+  get: &lt;P <span class="keyword">extends</span> <span class="type">GetPath</span>&gt;(path: P) => 
+    fetch(path).then(r => r.json()) <span class="keyword">as</span> <span class="type">Promise</span>&lt;<span class="type">ApiEndpoints</span>[<span class="type">`GET ${P}`</span>][<span class="string">'response'</span>]&gt;,
+};
+
+<span class="comment">// Usage - fully typed!</span>
+<span class="keyword">const</span> users = <span class="keyword">await</span> api.get(<span class="string">'/api/users'</span>); <span class="comment">// User[]</span></div>
+      </div>
+
+      <h2 id="multi-backend">Multiple Backends</h2>
+      <p>For microservices, configure multiple resolvers:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">typeowl.config.ts</span>
+        </div>
+        <div class="code-content">resolvers: [
+  { name: <span class="string">'api'</span>, source: <span class="string">'http://localhost:3001/__typeowl'</span> },
+  { name: <span class="string">'auth'</span>, source: <span class="string">'http://localhost:3002/__typeowl'</span> },
+  { name: <span class="string">'payments'</span>, source: <span class="string">'http://localhost:3003/__typeowl'</span> },
+]</div>
+      </div>
+
+      <h2 id="security">Security</h2>
+      <p>Protect TypeOwl endpoints in production:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">typeowl.server.config.ts</span>
+        </div>
+        <div class="code-content">guard: {
+  enabled: <span class="string">'development'</span>,  <span class="comment">// Only in dev, or true/false</span>
+  apiKey: process.env.TYPEOWL_API_KEY,
+}</div>
+      </div>
+
+      <h2 id="watch-mode">Watch Mode</h2>
+      <p>Auto-sync types during development:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">terminal</span>
+        </div>
+        <div class="code-content"><span class="comment"># Polls for changes every 5 seconds</span>
+npm run typeowl:watch</div>
+      </div>
+
+      <div class="callout callout-warning">
+        <strong>⚡ Pro Tip</strong>
+        Use <code>concurrently</code> to run watch mode alongside your dev server:
+        <code>"dev:watch": "concurrently \"npm run typeowl:watch\" \"vite\""</code>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "TypeOwl Documentation",
+    "description": "Complete guide to setting up TypeOwl for type synchronization between backend and frontend",
+    "author": {
+      "@type": "Organization",
+      "name": "TypeOwl"
+    }
+  }
+  </script>
+</body>
+</html>
+

@@ -2,11 +2,47 @@
   <img src="./public/typeOwl.logo.png" alt="TypeOwl Logo" width="120" />
 </p>
 
-# TypeOwl Example Frontend
+# TypeOwl Documentation Site
 
-A React + Vite app that syncs types from the backend using TypeOwl.
+A documentation website for TypeOwl with static HTML pages for SEO and a React app for interactive examples.
 
-## Setup
+## Structure
+
+```
+├── index.html              # Landing page (static HTML, SEO-optimized)
+├── examples.html           # Examples page (React app entry)
+├── public/
+│   ├── docs/
+│   │   └── index.html      # Documentation page (static HTML)
+│   ├── engine/
+│   │   └── index.html      # How It Works page (static HTML)
+│   ├── typeOwl.logo.png    # Logo asset
+│   └── owl.svg             # Favicon
+├── src/
+│   ├── App.tsx             # React app for interactive examples
+│   ├── api/                # Type-safe API client
+│   ├── components/         # UI components
+│   └── main.tsx            # React entry point
+└── vite.config.ts          # Vite configuration
+```
+
+## Pages
+
+| Route | Type | Description |
+|-------|------|-------------|
+| `/` | Static HTML | Landing page with hero, features, and CTA |
+| `/docs/index.html` | Static HTML | Full documentation with sidebar navigation |
+| `/engine/index.html` | Static HTML | Technical deep-dive into how TypeOwl works |
+| `/examples.html` | React App | Interactive API testing with live data |
+
+## Why This Architecture?
+
+- **SEO Optimized**: Landing, docs, and engine pages are static HTML with full meta tags
+- **Fast Initial Load**: No JavaScript needed for static pages
+- **Interactive Examples**: React handles the dynamic API testing functionality
+- **Simple Deployment**: Works with any static hosting (Vercel, Netlify, GitHub Pages)
+
+## Development
 
 ```bash
 # Make sure backend is running first!
@@ -17,176 +53,47 @@ npm install
 npm run dev
 ```
 
-The app starts on `http://localhost:5173`.
+The site starts on `http://localhost:5173`:
+- `http://localhost:5173/` - Landing page
+- `http://localhost:5173/docs/index.html` - Documentation
+- `http://localhost:5173/engine/index.html` - How It Works
+- `http://localhost:5173/examples.html` - Interactive Examples
 
-## Configuration
+## Scripts
 
-TypeOwl uses a config file similar to Vite or Rsbuild:
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Sync types and start dev server |
+| `npm run build` | Build for production |
+| `npm run preview` | Preview production build |
+| `npm run typeowl:sync` | One-time type sync |
+| `npm run typeowl:watch` | Watch for type changes |
+
+## TypeOwl Configuration
 
 ```typescript
 // typeowl.config.ts
 import { defineConfig } from 'typeowl';
 
 export default defineConfig({
-  // Single backend
   resolvers: [
     {
       name: 'api',
       source: 'http://localhost:3001/__typeowl',
     },
   ],
-  
-  // Or multiple backends (microservices)
-  // resolvers: [
-  //   { name: 'api', source: 'http://localhost:3001/__typeowl' },
-  //   { name: 'auth', source: 'http://localhost:3002/__typeowl' },
-  //   { name: 'payments', source: 'http://localhost:3003/__typeowl' },
-  // ],
-  
   output: './.typeowl',
   cache: './.typeowl-cache',
-  
-  // Lifecycle hooks
-  hooks: {
-    afterResolverSync: (resolver, result) => {
-      console.log(`  ✓ ${resolver}: v${result.version}`);
-    },
-  },
 });
 ```
 
-## Scripts
+## Adding New Static Pages
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Sync types once, then start Vite |
-| `npm run dev:watch` | Sync types continuously + start Vite |
-| `npm run typeowl:sync` | One-time type sync |
-| `npm run typeowl:watch` | Watch for type changes (polls every 5s) |
-| `npm run build` | Production build |
+To add a new static page:
 
-## How It Works
+1. Create a folder in `public/` (e.g., `public/tutorials/`)
+2. Add an `index.html` with full HTML structure
+3. Include SEO meta tags, navigation, and footer
+4. Update navigation links in all pages
 
-### 1. Configure Resolvers
-
-Define your backend sources in `typeowl.config.ts`:
-
-```typescript
-export default defineConfig({
-  resolvers: [
-    { name: 'api', source: 'http://localhost:3001/__typeowl' },
-  ],
-});
-```
-
-### 2. Sync Types
-
-```bash
-npm run typeowl:sync
-# → Loads typeowl.config.ts
-# → Fetches types from each resolver
-# → Writes to .typeowl/
-```
-
-### 3. Import Types
-
-```typescript
-// Import all types from the index
-import type { User, Post, ApiEndpoints } from '@typeowl';
-
-// Or import from specific domains
-import type { User } from '@typeowl/users';
-import type { Post } from '@typeowl/posts';
-import type { ApiError } from '@typeowl/common';
-```
-
-### 4. Type-Safe API Calls
-
-```typescript
-// The API knows exact request/response types!
-const users: User[] = await api('GET /api/users');
-
-const newUser: User = await api('POST /api/users', {
-  body: { email: 'test@example.com', name: 'Test' }
-});
-```
-
-## Generated Files
-
-After syncing, you'll have:
-
-```
-.typeowl/
-├── index.d.ts    # Re-exports all types + ApiEndpoints
-├── users.d.ts    # User, CreateUserInput, UserQuery, etc.
-├── posts.d.ts    # Post, CreatePostInput
-├── common.d.ts   # ApiError, ApiSuccess
-├── main.d.ts     # (endpoints domain - usually empty)
-└── package.json  # Module config
-```
-
-## Multi-Backend Setup
-
-For microservices architecture with multiple backends:
-
-```typescript
-// typeowl.config.ts
-export default defineConfig({
-  resolvers: [
-    { name: 'api', source: 'http://localhost:3001/__typeowl' },
-    { name: 'auth', source: 'http://localhost:3002/__typeowl' },
-    { name: 'payments', source: 'http://localhost:3003/__typeowl' },
-  ],
-});
-```
-
-This creates separate directories:
-
-```
-.typeowl/
-├── api/          # Types from api backend
-│   ├── index.d.ts
-│   ├── users.d.ts
-│   └── ...
-├── auth/         # Types from auth backend
-│   ├── index.d.ts
-│   └── ...
-└── payments/     # Types from payments backend
-    ├── index.d.ts
-    └── ...
-```
-
-Import with namespace:
-
-```typescript
-import type { User } from '@typeowl/api';
-import type { Session } from '@typeowl/auth';
-import type { Invoice } from '@typeowl/payments';
-```
-
-## Watch Mode
-
-For continuous sync during development:
-
-```bash
-npm run dev:watch
-```
-
-This runs type sync in watch mode (polls every 5 seconds) alongside Vite.
-When you change types in the backend, they'll automatically update!
-
-## Environment Variables
-
-You can use environment variables for different environments:
-
-```typescript
-// typeowl.config.ts
-export default defineConfig({
-  resolvers: [
-    {
-      name: 'api',
-      source: process.env.TYPEOWL_API_URL || 'http://localhost:3001/__typeowl',
-    },
-  ],
-});
-```
+The React app (examples.html) is only used for the interactive examples page.

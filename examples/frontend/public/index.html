@@ -373,100 +373,23 @@
       background: var(--bg-secondary);
     }
 
-    /* Architecture Diagram */
-    .arch-diagram {
-      max-width: 700px;
+    .diagram {
+      max-width: 900px;
       margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-      align-items: center;
-    }
-
-    .arch-box {
-      width: 100%;
       background: var(--bg-card);
-      border: 2px solid var(--border);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 1.5rem 2rem;
-      position: relative;
-    }
-
-    .arch-box.backend {
-      border-color: var(--accent);
-      box-shadow: 0 0 30px rgba(245, 158, 11, 0.1);
-    }
-
-    .arch-box.frontend {
-      border-color: #3b82f6;
-      box-shadow: 0 0 30px rgba(59, 130, 246, 0.1);
-    }
-
-    .arch-box-title {
-      position: absolute;
-      top: -0.75rem;
-      left: 1.5rem;
-      background: var(--bg-primary);
-      padding: 0 0.75rem;
-      font-weight: 700;
-      font-size: 0.9rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .arch-box.backend .arch-box-title {
-      color: var(--accent);
-    }
-
-    .arch-box.frontend .arch-box-title {
-      color: #3b82f6;
-    }
-
-    .arch-item {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      padding: 0.5rem 0;
-      font-size: 0.9rem;
-    }
-
-    .arch-item code {
+      padding: 2.5rem;
       font-family: var(--font-mono);
-      background: var(--bg-tertiary);
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      color: var(--accent);
       font-size: 0.85rem;
-    }
-
-    .arch-item .desc {
-      color: var(--text-muted);
-      font-size: 0.85rem;
-    }
-
-    .arch-connector {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.25rem;
-      color: var(--text-muted);
-    }
-
-    .arch-connector .line {
-      width: 2px;
-      height: 30px;
-      background: linear-gradient(to bottom, var(--accent), #3b82f6);
-    }
-
-    .arch-connector .arrow {
-      font-size: 1.25rem;
-      color: #3b82f6;
-    }
-
-    .arch-connector .label {
-      font-size: 0.8rem;
+      line-height: 1.6;
+      overflow-x: auto;
+      white-space: pre;
       color: var(--text-secondary);
-      font-weight: 500;
+    }
+
+    .diagram .highlight {
+      color: var(--accent);
     }
 
     /* CTA Section */
@@ -573,12 +496,12 @@
         <span>TypeOwl</span>
       </a>
       <ul class="nav-links">
-        <li><a href="/docs/index.html">Documentation</a></li>
-        <li><a href="/engine/index.html">How It Works</a></li>
-        <li><a href="/examples.html">Examples</a></li>
+        <li><a href="/docs/">Documentation</a></li>
+        <li><a href="/engine/">How It Works</a></li>
+        <li><a href="/examples/">Examples</a></li>
         <li><a href="https://github.com/typeowl/typeowl" target="_blank">GitHub</a></li>
       </ul>
-      <a href="/docs/index.html" class="nav-cta">Get Started →</a>
+      <a href="/docs/" class="nav-cta">Get Started →</a>
     </div>
   </nav>
 
@@ -599,10 +522,10 @@
     </p>
 
     <div class="hero-buttons">
-      <a href="/docs/index.html" class="btn btn-primary">
+      <a href="/docs/" class="btn btn-primary">
         <span>📚</span> Read the Docs
       </a>
-      <a href="/examples.html" class="btn btn-secondary">
+      <a href="/examples/" class="btn btn-secondary">
         <span>🧪</span> Try Examples
       </a>
     </div>
@@ -685,50 +608,25 @@
       <p>Simple architecture, powerful results</p>
     </div>
 
-    <div class="arch-diagram">
-      <!-- Backend Box -->
-      <div class="arch-box backend">
-        <span class="arch-box-title">Backend (deployed)</span>
-        <div class="arch-item">
-          <code>/api/users</code>
-          <span class="desc">← Your actual API</span>
-        </div>
-        <div class="arch-item">
-          <code>/__typeowl</code>
-          <span class="desc">← Lightweight manifest (JSON)</span>
-        </div>
-        <div class="arch-item">
-          <code>/__typeowl/types/*.d.ts</code>
-          <span class="desc">← TypeScript definitions</span>
-        </div>
-      </div>
-
-      <!-- Connector -->
-      <div class="arch-connector">
-        <div class="line"></div>
-        <span class="label">HTTP (dev-time)</span>
-        <div class="line"></div>
-        <span class="arrow">↓</span>
-      </div>
-
-      <!-- Frontend Box -->
-      <div class="arch-box frontend">
-        <span class="arch-box-title">Frontend (npm run dev)</span>
-        <div class="arch-item">
-          <code>1.</code>
-          <span>typeowl sync</span>
-          <span class="desc">← Fetches manifest, compares hashes</span>
-        </div>
-        <div class="arch-item">
-          <code>2.</code>
-          <span>Downloads changed type files only (incremental!)</span>
-        </div>
-        <div class="arch-item">
-          <code>3.</code>
-          <code>import type { User } from '@typeowl'</code>
-          <span class="desc">← Full autocomplete!</span>
-        </div>
-      </div>
+    <div class="diagram">
+┌─────────────────────────────────────────────────────────────────┐
+│                    <span class="highlight">BACKEND</span> (deployed)                           │
+│                                                                 │
+│   /api/users              ← Your actual API                    │
+│   <span class="highlight">/__typeowl</span>              ← Lightweight manifest (JSON)        │
+│   <span class="highlight">/__typeowl/types/*.d.ts</span> ← TypeScript definitions             │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                        HTTP (dev-time)
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    <span class="highlight">FRONTEND</span> (npm run dev)                       │
+│                                                                 │
+│   1. typeowl sync       ← Fetches manifest, compares hashes    │
+│   2. Downloads changed type files only (incremental!)          │
+│   3. import type { User } from '@typeowl'  ← Full autocomplete!│
+└─────────────────────────────────────────────────────────────────┘
     </div>
   </section>
 
@@ -745,10 +643,10 @@
     </div>
 
     <div class="hero-buttons">
-      <a href="/docs/index.html" class="btn btn-primary">
+      <a href="/docs/" class="btn btn-primary">
         <span>📚</span> Read the Docs
       </a>
-      <a href="/engine/index.html" class="btn btn-secondary">
+      <a href="/engine/" class="btn btn-secondary">
         <span>⚙️</span> See How It Works
       </a>
     </div>
@@ -759,7 +657,7 @@
     <p>
       Made with 🦉 by the TypeOwl team · 
       <a href="https://github.com/typeowl/typeowl">GitHub</a> · 
-      <a href="/docs/index.html">Docs</a>
+      <a href="/docs/">Docs</a>
     </p>
   </footer>
 
