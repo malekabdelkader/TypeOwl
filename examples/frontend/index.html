@@ -44,6 +44,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  
   <style>
     :root {
       --bg-primary: #0a0a0b;
@@ -382,8 +385,16 @@
     }
 
     .feature-icon {
-      font-size: 2rem;
+      font-size: 1.75rem;
       margin-bottom: 1rem;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent-glow);
+      border-radius: 12px;
+      color: var(--accent);
     }
 
     .feature-card h3 {
@@ -496,6 +507,174 @@
       font-size: 0.8rem;
       color: var(--text-secondary);
       font-weight: 500;
+    }
+
+    /* Comparison Section */
+    .comparison-section {
+      padding: 6rem 2rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin: 3rem 0;
+    }
+
+    @media (max-width: 900px) {
+      .comparison-grid {
+        grid-template-columns: 1fr;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+    }
+
+    .comparison-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .comparison-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .comparison-card.typeowl-card {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, rgba(245, 158, 11, 0.06) 0%, var(--bg-card) 100%);
+    }
+
+    .card-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header .tool-logo {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-header .tool-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      border-radius: 12px;
+      margin-bottom: 0.75rem;
+      font-size: 1.25rem;
+      color: var(--text-muted);
+    }
+
+    .card-header h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .typeowl-card .card-header h3 {
+      color: var(--accent);
+    }
+
+    .card-tag {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.25rem 0.75rem;
+      border-radius: 50px;
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .card-tag.alt {
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+    }
+
+    .card-features {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .card-features li {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    .card-features li:last-child {
+      border-bottom: none;
+    }
+
+    .card-features li i {
+      font-size: 0.75rem;
+      width: 16px;
+      text-align: center;
+    }
+
+    .card-features li .fa-check {
+      color: var(--success);
+    }
+
+    .card-features li .fa-minus {
+      color: var(--text-muted);
+      opacity: 0.4;
+    }
+
+    .card-features li.muted {
+      color: var(--text-muted);
+      opacity: 0.7;
+    }
+
+    .card-ideal {
+      margin-top: 1.25rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+      font-style: italic;
+    }
+
+    .typeowl-card .card-ideal {
+      color: var(--accent);
+      font-style: normal;
+      font-weight: 500;
+    }
+
+    .comparison-note {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .comparison-note i {
+      color: var(--accent);
     }
 
     /* CTA Section */
@@ -614,7 +793,7 @@
   <!-- Hero Section -->
   <section class="hero">
     <div class="hero-badge">
-      <span>🎉</span>
+      <i class="fa-solid fa-sparkles"></i>
       <span>v1.0 — Types that fly across repos</span>
     </div>
 
@@ -623,16 +802,16 @@
     <h1>TypeScript Types<br>Over HTTP</h1>
 
     <p>
-      Share types between backend and frontend without a monorepo. 
-      Incremental sync, Zod validation, and full autocomplete — all over HTTP.
+      Share types between backend and frontend without a monorepo or shared packages. 
+      Deploy independently. Sync on-demand. Unlike tRPC — true decoupling.
     </p>
 
     <div class="hero-buttons">
       <a href="/docs/index.html" class="btn btn-primary">
-        <span>📚</span> Read the Docs
+        <i class="fa-solid fa-book"></i> Read the Docs
       </a>
       <a href="/examples.html" class="btn btn-secondary">
-        <span>🧪</span> Try Examples
+        <i class="fa-solid fa-flask"></i> Try Examples
       </a>
     </div>
 
@@ -702,44 +881,44 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'<
   <section class="features">
     <div class="section-title">
       <h2>Why TypeOwl?</h2>
-      <p>Type safety without the complexity</p>
+      <p>True decoupling between frontend and backend — unlike tRPC or ts-rest</p>
     </div>
 
     <div class="features-grid">
       <div class="feature-card">
-        <div class="feature-icon">🔄</div>
-        <h3>Incremental Sync</h3>
-        <p>Only downloads type files that changed. Hash-based comparison means instant syncs when nothing changed.</p>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">📦</div>
+        <div class="feature-icon"><i class="fa-solid fa-code-branch"></i></div>
         <h3>No Monorepo Required</h3>
-        <p>Backend and frontend in separate repos? Different teams? TypeOwl bridges them over HTTP.</p>
+        <p>Backend and frontend in separate repos? Different teams? No shared packages needed. TypeOwl bridges them over HTTP.</p>
       </div>
 
       <div class="feature-card">
-        <div class="feature-icon">✅</div>
+        <div class="feature-icon"><i class="fa-solid fa-rocket"></i></div>
+        <h3>Independent Deploys</h3>
+        <p>Commit types with your code. Frontend and backend deploy separately without breaking each other.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-laptop-code"></i></div>
+        <h3>Pure Frontend Friendly</h3>
+        <p>Point to production URL and sync. Frontend devs get real types without needing backend code access.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-arrows-rotate"></i></div>
+        <h3>On-Demand Sync</h3>
+        <p>You control when types update: during dev, in CI/CD, or manually. No forced updates from backend changes.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-bolt"></i></div>
+        <h3>Incremental & Fast</h3>
+        <p>Hash-based comparison means only changed files download. Instant syncs when nothing changed.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-shield-halved"></i></div>
         <h3>Optional Zod Validation</h3>
-        <p>Use <code>typeowl.endpoint()</code> with Zod for runtime validation, or extract types directly from .ts files.</p>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">🗺️</div>
-        <h3>Endpoint Type Map</h3>
-        <p>Auto-generated <code>ApiEndpoints</code> interface maps every route to its request/response types.</p>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">💾</div>
-        <h3>Offline Cache</h3>
-        <p>Types are cached locally. When your backend is down, development continues with cached types.</p>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">👀</div>
-        <h3>Watch Mode</h3>
-        <p>Poll for changes during development. Types update automatically when your backend changes.</p>
+        <p>Use <code>typeowl.endpoint()</code> for runtime validation, or extract types directly from .ts files.</p>
       </div>
     </div>
   </section>
@@ -772,14 +951,14 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'<
       <!-- Connector -->
       <div class="arch-connector">
         <div class="line"></div>
-        <span class="label">HTTP (dev-time)</span>
+        <span class="label">HTTP (dev, CI/CD, or on-demand)</span>
         <div class="line"></div>
         <span class="arrow">↓</span>
       </div>
 
       <!-- Frontend Box -->
       <div class="arch-box frontend">
-        <span class="arch-box-title">Frontend (npm run dev)</span>
+        <span class="arch-box-title">Frontend (any environment)</span>
         <div class="arch-item">
           <code>1.</code>
           <span>typeowl sync</span>
@@ -791,11 +970,84 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'<
         </div>
         <div class="arch-item">
           <code>3.</code>
+          <span>Commit types → independent deploys!</span>
+        </div>
+        <div class="arch-item">
+          <code>4.</code>
           <code>import type { User } from 'typeowl/types'</code>
           <span class="desc">← Full autocomplete!</span>
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- Comparison Section -->
+  <section class="comparison-section">
+    <div class="section-title">
+      <h2>How Does It Compare?</h2>
+      <p>Different tools for different architectural needs</p>
+    </div>
+
+    <div class="comparison-grid">
+      <!-- TypeOwl Card -->
+      <div class="comparison-card typeowl-card">
+        <div class="card-header">
+          <img src="/typeOwl.logo.png" alt="TypeOwl" class="tool-logo">
+          <h3>TypeOwl</h3>
+          <span class="card-tag">Decoupled</span>
+        </div>
+        <ul class="card-features">
+          <li><i class="fa-solid fa-check"></i> Separate repositories</li>
+          <li><i class="fa-solid fa-check"></i> No shared code needed</li>
+          <li><i class="fa-solid fa-check"></i> Independent deploys</li>
+          <li><i class="fa-solid fa-check"></i> Existing REST APIs</li>
+          <li><i class="fa-solid fa-check"></i> On-demand sync</li>
+          <li><i class="fa-solid fa-check"></i> Optional validation</li>
+        </ul>
+        <p class="card-ideal">Ideal for separate teams & repos</p>
+      </div>
+
+      <!-- tRPC Card -->
+      <div class="comparison-card">
+        <div class="card-header">
+          <div class="tool-icon"><i class="fa-solid fa-bolt"></i></div>
+          <h3>tRPC</h3>
+          <span class="card-tag alt">Integrated</span>
+        </div>
+        <ul class="card-features">
+          <li><i class="fa-solid fa-check"></i> End-to-end type safety</li>
+          <li><i class="fa-solid fa-check"></i> Built-in validation</li>
+          <li><i class="fa-solid fa-check"></i> Excellent DX</li>
+          <li class="muted"><i class="fa-solid fa-minus"></i> Requires monorepo</li>
+          <li class="muted"><i class="fa-solid fa-minus"></i> Coupled deploys</li>
+          <li class="muted"><i class="fa-solid fa-minus"></i> Custom protocol</li>
+        </ul>
+        <p class="card-ideal">Ideal for full-stack monorepos</p>
+      </div>
+
+      <!-- ts-rest Card -->
+      <div class="comparison-card">
+        <div class="card-header">
+          <div class="tool-icon"><i class="fa-solid fa-file-contract"></i></div>
+          <h3>ts-rest</h3>
+          <span class="card-tag alt">Contract</span>
+        </div>
+        <ul class="card-features">
+          <li><i class="fa-solid fa-check"></i> REST compatible</li>
+          <li><i class="fa-solid fa-check"></i> Type-safe contracts</li>
+          <li><i class="fa-solid fa-check"></i> Built-in validation</li>
+          <li class="muted"><i class="fa-solid fa-minus"></i> Shared npm package</li>
+          <li class="muted"><i class="fa-solid fa-minus"></i> Coupled releases</li>
+          <li class="muted"><i class="fa-solid fa-minus"></i> Contract syncing</li>
+        </ul>
+        <p class="card-ideal">Ideal for shared contract workflows</p>
+      </div>
+    </div>
+
+    <p class="comparison-note">
+      <i class="fa-solid fa-circle-info"></i>
+      All three provide excellent type safety. TypeOwl shines in flexibility and when teams and repos are separate.
+    </p>
   </section>
 
   <!-- CTA Section -->
@@ -806,16 +1058,16 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'<
     <div class="install-cmd">
       <code>npm install typeowl</code>
       <button onclick="navigator.clipboard.writeText('npm install typeowl')" title="Copy">
-        📋
+        <i class="fa-regular fa-copy"></i>
       </button>
     </div>
 
     <div class="hero-buttons">
       <a href="/docs/index.html" class="btn btn-primary">
-        <span>📚</span> Read the Docs
+        <i class="fa-solid fa-book"></i> Read the Docs
       </a>
       <a href="/engine/index.html" class="btn btn-secondary">
-        <span>⚙️</span> See How It Works
+        <i class="fa-solid fa-gears"></i> See How It Works
       </a>
     </div>
   </section>
@@ -823,7 +1075,7 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'<
   <!-- Footer -->
   <footer>
     <p>
-      Made with 🦉 by the TypeOwl team · 
+      Made with <img src="/typeOwl.logo.png" alt="TypeOwl" style="width: 20px; height: 20px; vertical-align: middle;"> by the TypeOwl team · 
       <a href="https://github.com/malekabdelkader/TypeOwl">GitHub</a> · 
       <a href="/docs/index.html">Docs</a>
     </p>

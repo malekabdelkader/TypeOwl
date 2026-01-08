@@ -4,10 +4,27 @@ node_modules/
 # Build output
 dist/
 
-# TypeOwl cache (not needed in repo)
-.typeowl-cache/
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🦉 TypeOwl - Type Management
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# RECOMMENDED: Commit .typeowl/ for independent deploys and guaranteed compatibility
+# Only gitignore the cache directory
+#
+# Why commit types?
+# ✅ Types match the API version when code was written
+# ✅ CI/CD builds work without backend access
+# ✅ Frontend devs can clone and run immediately
+# ✅ Independent deploys - backend changes don't break frontend builds
+# ✅ Type changes are visible in code reviews
+#
+# Alternative: Gitignore both for always-latest types (requires backend access)
+# .typeowl/
+# .typeowl-cache/
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# Note: .typeowl/ IS committed (contains generated types for CI builds)
+# Cache only - types are committed for CI builds and independent deploys
+.typeowl-cache/
 
 # Vite
 *.local

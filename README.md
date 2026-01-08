@@ -34,7 +34,18 @@
 
 ---
 
-TypeOwl solves the **multi-repo type sharing problem**. When your backend and frontend live in separate repositories (or are managed by different teams), TypeOwl lets types travel over HTTP during development.
+TypeOwl solves the **multi-repo type sharing problem**. When your backend and frontend live in separate repositories (or are managed by different teams), TypeOwl lets types travel over HTTP — **no monorepo required**.
+
+## Why TypeOwl?
+
+| 🚀 **Power Feature** | **What It Means** |
+|---------------------|------------------|
+| **No Monorepo Required** | Backend and frontend can live in completely separate repositories. Unlike tRPC or ts-rest, there's no tight coupling. |
+| **Pure Frontend Developer Friendly** | Frontend devs don't need access to backend code. Just point to production URL and sync. Types are always up-to-date. |
+| **Independent Deploys** | Deploy frontend and backend separately. Commit types with your code = guaranteed compatibility at deploy time. |
+| **On-Demand Sync** | You control when types update: at build time, in CI/CD, or manually. No forced updates. |
+| **Loose Coupling** | Backend changes don't break frontend builds. Frontend pulls types when ready. |
+| **Works with Any REST API** | Not a framework — just a type synchronization layer on top of your existing API. |
 
 ## The Problem
 
@@ -51,30 +62,35 @@ interface User {
 // - Copy/paste? Drifts out of sync
 // - NPM package? Publishing overhead
 // - Monorepo? Not always possible
+// - tRPC/ts-rest? Too tightly coupled
 ```
 
 ## The Solution
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    BACKEND (deployed)                           │
+│              BACKEND (local dev OR production)                  │
 │                                                                 │
 │   /api/users              ← Your actual API                    │
 │   /__typeowl              ← Lightweight manifest (JSON)        │
 │   /__typeowl/types/*.d.ts ← TypeScript definitions             │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
-                        HTTP (dev-time)
+                           HTTP sync
+                     (dev, CI/CD, or on-demand)
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    FRONTEND (npm run dev)                       │
+│                         FRONTEND                                │
 │                                                                 │
 │   1. typeowl sync       ← Fetches manifest, compares hashes    │
 │   2. Downloads changed type files only (incremental!)          │
-│   3. import type { User } from 'typeowl/types'  ← Full autocomplete!│
+│   3. Commit types with your code → guaranteed compatibility!   │
+│   4. import type { User } from 'typeowl/types'  ← Full autocomplete!│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> 💡 **Key Insight**: You can point to your **production** backend URL. Frontend developers don't need backend code access — just sync and go!
 
 ## Quick Start
 
@@ -193,13 +209,17 @@ export default defineConfig({
   resolvers: [
     {
       name: 'api',
-      source: 'http://localhost:3001/__typeowl',
+      // Use local dev server, staging, or production!
+      source: process.env.TYPEOWL_API_URL || 'http://localhost:3001/__typeowl',
+      // For production: 'https://api.yourcompany.com/__typeowl'
     },
   ],
   output: './.typeowl',
   cache: './.typeowl-cache',
 });
 ```
+
+> 💡 **Tip**: Point to production to get real, deployed types without needing backend code access!
 
 **2. Sync types using CLI:**
 
@@ -354,6 +374,73 @@ const users = await api.get('/api/users');     // User[]
 const user = await api.post('/api/users', { name: 'John', email: 'john@example.com' }); // User
 ```
 
+## Deployment Strategies
+
+TypeOwl gives you flexibility in how you manage types. Choose the strategy that fits your workflow:
+
+### Strategy 1: Commit Types (Recommended for Production)
+
+```bash
+# .gitignore
+.typeowl-cache/
+# .typeowl/ is NOT gitignored - types are committed!
+```
+
+**What you get:**
+- ✅ **Guaranteed compatibility** — Types in repo match the API version when code was written
+- ✅ **CI/CD works offline** — No need to reach backend during builds
+- ✅ **Code review includes types** — Type changes are visible in PRs
+- ✅ **Independent deploys** — Frontend doesn't break if backend types change
+- ✅ **Pure frontend developers** — Just clone and run, types are already there
+
+**When to sync:**
+```bash
+# Sync before committing when you know backend types changed
+npx typeowl sync
+git add .typeowl/
+git commit -m "feat: update types from backend v2.1.0"
+```
+
+### Strategy 2: Gitignore Types (Dynamic Sync)
+
+```bash
+# .gitignore
+.typeowl/
+.typeowl-cache/
+```
+
+**What you get:**
+- ✅ **Always latest types** — Every dev/build fetches fresh types
+- ✅ **Smaller repo** — No generated files in git
+- ⚠️ **Requires backend access** — CI/CD needs to reach TypeOwl endpoint
+- ⚠️ **Breaking changes propagate immediately** — No buffer between backend and frontend
+
+**When to use:**
+- Monorepo where backend and frontend deploy together
+- Development environments with guaranteed backend access
+- When you want forced synchronization
+
+### Strategy 3: Production URL (Pure Frontend)
+
+Frontend developers can point directly to production:
+
+```typescript
+// typeowl.config.ts
+export default defineConfig({
+  resolvers: [
+    {
+      name: 'api',
+      source: 'https://api.yourcompany.com/__typeowl',
+    },
+  ],
+});
+```
+
+**What you get:**
+- ✅ **No backend code needed** — Frontend devs don't need backend repo
+- ✅ **Production-accurate types** — Types match what's actually deployed
+- ✅ **Team independence** — Frontend and backend teams work separately
+
 ## Features
 
 - 🔄 **Incremental sync** — Only fetches files that changed (via hash comparison)
@@ -365,6 +452,7 @@ const user = await api.post('/api/users', { name: 'John', email: 'john@example.c
 - 💾 **Offline cache** — Works when backend is down
 - 👀 **Watch mode** — Auto-refresh on changes
 - 🔒 **Guard config** — Protect TypeOwl endpoints with API keys
+- 🚀 **Independent deploys** — Commit types to guarantee compatibility
 
 ### Zod is Optional
 
@@ -483,15 +571,27 @@ npm run dev
 
 ## Comparison
 
-| Feature | TypeOwl | tRPC | GraphQL Codegen |
-|---------|---------|------|-----------------|
-| Works across repos | ✅ | ❌ (needs monorepo) | ✅ |
-| No build step | ✅ | ✅ | ❌ |
-| REST APIs | ✅ | ❌ | ❌ |
-| Runtime validation | ✅ | ✅ | ❌ |
-| Incremental sync | ✅ | N/A | ❌ |
-| Static type extraction | ✅ | ❌ | ❌ |
-| Endpoint type map | ✅ | ✅ | ✅ |
+| Feature | TypeOwl | tRPC | ts-rest | GraphQL Codegen |
+|---------|---------|------|---------|-----------------|
+| **Works across repos** | ✅ | ❌ monorepo only | ❌ shared package | ✅ |
+| **No shared code/package** | ✅ | ❌ | ❌ | ✅ |
+| **Independent deploys** | ✅ | ❌ | ❌ | ✅ |
+| **Pure frontend dev** | ✅ point to prod | ❌ | ❌ | ✅ |
+| **REST APIs** | ✅ | ❌ | ✅ | ❌ |
+| **No build step** | ✅ | ✅ | ✅ | ❌ |
+| **Runtime validation** | ✅ optional | ✅ | ✅ | ❌ |
+| **Incremental sync** | ✅ | N/A | N/A | ❌ |
+| **Static type extraction** | ✅ | ❌ | ❌ | ❌ |
+| **Offline cache** | ✅ | N/A | N/A | ❌ |
+| **Backend adoption cost** | Low (soft setup) | High (rewrite handlers) | Medium | Medium |
+
+### Why Choose TypeOwl Over tRPC/ts-rest?
+
+- **tRPC**: Requires a monorepo or shared npm package. Backend and frontend are tightly coupled — you can't deploy them independently. Great for solo developers, but challenging for separate teams.
+
+- **ts-rest**: Requires a shared contract package published to npm. Still creates coupling between frontend and backend release cycles.
+
+- **TypeOwl**: True decoupling. Backend exposes types over HTTP. Frontend syncs on demand. No shared code, no npm packages to publish, no monorepo required. Teams work independently.
 
 ## Roadmap
 

@@ -350,8 +350,14 @@ export interface TypeResolver {
   name: string;
   
   /** 
-   * Source URL or function that returns source URL
-   * Can be dynamic based on environment
+   * Source URL or function that returns source URL.
+   * 
+   * Point to ANY environment - local dev, staging, or production!
+   * Frontend devs can sync from production without backend code access.
+   * 
+   * @example 'http://localhost:3001/__typeowl'
+   * @example 'https://api.yourcompany.com/__typeowl'
+   * @example () => process.env.API_URL + '/__typeowl'
    */
   source: string | (() => string);
   
@@ -435,13 +441,19 @@ export interface TypeOwlConfig {
   resolvers: string | TypeResolver | TypeResolver[];
   
   /** 
-   * Output directory for generated types
+   * Output directory for generated types.
+   * 
+   * RECOMMENDED: Commit this directory for independent deploys,
+   * CI/CD builds without backend access, and type changes in PRs.
+   * 
    * @default '.typeowl'
    */
   output?: string;
   
   /** 
-   * Cache directory for offline fallback
+   * Cache directory for offline fallback.
+   * Should be gitignored (local cache only).
+   * 
    * @default '.typeowl-cache'
    */
   cache?: string;

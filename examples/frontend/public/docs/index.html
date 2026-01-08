@@ -35,6 +35,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  
   <style>
     :root {
       --bg-primary: #0a0a0b;
@@ -411,8 +414,14 @@
     }
 
     .callout strong {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       margin-bottom: 0.25rem;
+    }
+
+    .callout strong i {
+      font-size: 1rem;
     }
 
     /* Table */
@@ -490,6 +499,7 @@
         <ul class="sidebar-links">
           <li><a href="#client-config">Client Config</a></li>
           <li><a href="#syncing">Syncing Types</a></li>
+          <li><a href="#deployment-strategies">Deployment Strategies</a></li>
           <li><a href="#using-types">Using Types</a></li>
           <li><a href="#tsconfig-setup">TypeScript Setup</a></li>
           <li><a href="#api-client">API Client</a></li>
@@ -526,7 +536,7 @@ npm install zod</div>
       </div>
 
       <div class="callout callout-info">
-        <strong>💡 Zod is optional!</strong>
+        <strong><i class="fa-solid fa-lightbulb"></i> Zod is optional!</strong>
         You can use TypeOwl without Zod for static type extraction. Zod is only needed for <code>typeowl.endpoint()</code> runtime validation.
       </div>
 
@@ -588,7 +598,7 @@ npx typeowl watch -i 30</div>
       <h2 id="project-structure">Project Structure</h2>
       <div class="file-tree">
         <div class="file-tree-section">
-          <div class="file-tree-root">📁 backend/</div>
+          <div class="file-tree-root"><i class="fa-solid fa-folder"></i> backend/</div>
           <ul>
             <li><span class="file">typeowl.server.config.ts</span> <span class="desc">Server config</span></li>
             <li>
@@ -608,16 +618,19 @@ npx typeowl watch -i 30</div>
         </div>
         
         <div class="file-tree-section">
-          <div class="file-tree-root">📁 frontend/</div>
+          <div class="file-tree-root"><i class="fa-solid fa-folder"></i> frontend/</div>
           <ul>
             <li><span class="file">typeowl.config.ts</span> <span class="desc">Client config</span></li>
             <li>
-              <span class="folder">.typeowl/</span> <span class="desc">Generated types (gitignore)</span>
+              <span class="folder">.typeowl/</span> <span class="desc">Generated types (commit for independent deploys!)</span>
               <ul>
                 <li><span class="file">index.d.ts</span></li>
                 <li><span class="file">content.d.ts</span></li>
                 <li><span class="file">endpoints.d.ts</span></li>
               </ul>
+            </li>
+            <li>
+              <span class="folder">.typeowl-cache/</span> <span class="desc">Local cache (gitignore)</span>
             </li>
             <li>
               <span class="folder">src/</span>
@@ -733,12 +746,12 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</
       </ul>
 
       <div class="callout callout-success">
-        <strong>✅ Best Practice</strong>
+        <strong><i class="fa-solid fa-check"></i> Best Practice</strong>
         Use Zod for body/params validation, and type references for responses. This gives you validation where it matters most (user input) without runtime overhead for responses.
       </div>
 
       <h2 id="client-config">Client Configuration</h2>
-      <p>Configure where to fetch types from:</p>
+      <p>Configure where to fetch types from. You can point to local dev, staging, or production!</p>
 
       <div class="code-block">
         <div class="code-header">
@@ -750,12 +763,20 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</
   resolvers: [
     {
       name: <span class="string">'api'</span>,
-      source: <span class="string">'http://localhost:3001/__typeowl'</span>,
+      <span class="comment">// Use environment variable or default to local</span>
+      source: process.env.TYPEOWL_API_URL || <span class="string">'http://localhost:3001/__typeowl'</span>,
+      <span class="comment">// Or point directly to production:</span>
+      <span class="comment">// source: 'https://api.yourcompany.com/__typeowl',</span>
     },
   ],
   output: <span class="string">'./.typeowl'</span>,
   cache: <span class="string">'./.typeowl-cache'</span>,
 });</div>
+      </div>
+
+      <div class="callout callout-info">
+        <strong><i class="fa-solid fa-lightbulb"></i> No monorepo required!</strong>
+        Frontend developers can point to production and get real types without needing backend code access.
       </div>
 
       <h2 id="syncing">Syncing Types</h2>
@@ -792,12 +813,72 @@ npx typeowl watch --interval 30</div>
       </div>
       
       <div class="callout callout-info">
-        <strong>💡 CLI Commands</strong>
+        <strong><i class="fa-solid fa-terminal"></i> CLI Commands</strong>
         <ul>
           <li><code>typeowl sync</code> — [CLIENT] One-time sync from remote backend</li>
           <li><code>typeowl watch</code> — [CLIENT] Continuously poll for type changes</li>
           <li><code>typeowl generate</code> — [SERVER] Pre-generate static types</li>
         </ul>
+      </div>
+
+      <h2 id="deployment-strategies">Deployment Strategies</h2>
+      <p>TypeOwl gives you flexibility in how you manage types. Choose the strategy that fits your workflow:</p>
+
+      <h3>Strategy 1: Commit Types (Recommended)</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">.gitignore</span>
+        </div>
+        <div class="code-content"><span class="comment"># Only cache is gitignored, NOT the types!</span>
+.typeowl-cache/</div>
+      </div>
+
+      <div class="callout callout-success">
+        <strong><i class="fa-solid fa-check"></i> What you get:</strong>
+        <ul>
+          <li><strong>Guaranteed compatibility</strong> — Types match the API when code was written</li>
+          <li><strong>CI/CD works offline</strong> — No backend access needed during builds</li>
+          <li><strong>Independent deploys</strong> — Frontend doesn't break if backend changes</li>
+          <li><strong>Pure frontend devs</strong> — Clone and run, types are already there</li>
+        </ul>
+      </div>
+
+      <h3>Strategy 2: Gitignore Types</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">.gitignore</span>
+        </div>
+        <div class="code-content"><span class="comment"># Gitignore both - sync fresh every time</span>
+.typeowl/
+.typeowl-cache/</div>
+      </div>
+
+      <div class="callout callout-warning">
+        <strong><i class="fa-solid fa-triangle-exclamation"></i> Trade-offs:</strong>
+        <ul>
+          <li>Requires backend access during CI/CD builds</li>
+          <li>Breaking changes propagate immediately</li>
+          <li>Best for monorepos where FE/BE deploy together</li>
+        </ul>
+      </div>
+
+      <h3>Strategy 3: Point to Production</h3>
+      <p>Frontend developers can sync from production without backend code access:</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">typeowl.config.ts</span>
+        </div>
+        <div class="code-content">resolvers: [
+  {
+    name: <span class="string">'api'</span>,
+    source: <span class="string">'https://api.yourcompany.com/__typeowl'</span>,
+  },
+]</div>
+      </div>
+
+      <div class="callout callout-info">
+        <strong><i class="fa-solid fa-lightbulb"></i> Perfect for:</strong>
+        Pure frontend developers who don't have access to backend code. Just point to production and sync!
       </div>
 
       <h2 id="using-types">Using Types</h2>
@@ -830,7 +911,7 @@ npx typeowl watch --interval 30</div>
       </div>
 
       <div class="callout callout-info">
-        <strong>💡 Why typeowl/types?</strong>
+        <strong><i class="fa-solid fa-lightbulb"></i> Why typeowl/types?</strong>
         TypeOwl ships with a placeholder at <code>typeowl/types</code> that provides empty types before you run sync. After configuring your tsconfig paths, the placeholder gets overridden with your actual generated types.
       </div>
 
@@ -931,7 +1012,7 @@ npx typeowl watch --interval 60</div>
       </div>
 
       <div class="callout callout-warning">
-        <strong>⚡ Pro Tip</strong>
+        <strong><i class="fa-solid fa-bolt"></i> Pro Tip</strong>
         Use <code>concurrently</code> to run watch mode alongside your dev server:
         <code>"dev:watch": "concurrently \"npx typeowl watch\" \"vite\""</code>
       </div>

@@ -3,6 +3,12 @@
  * 
  * This file defines where to fetch types from and how to sync them.
  * Similar to vite.config.ts or rsbuild.config.ts
+ * 
+ * Key power features:
+ * - Point to ANY backend (local, staging, production)
+ * - No monorepo required - works across separate repos
+ * - Frontend devs can sync from production without backend code access
+ * - Commit types for independent deploys and CI/CD compatibility
  */
 
 import { defineConfig } from 'typeowl';
@@ -43,9 +49,13 @@ export default defineConfig({
        * Source URL for the TypeOwl endpoint.
        * Can be a string or a function that returns a string.
        * 
-       * @example
-       * source: 'http://localhost:3001/__typeowl'
-       * source: () => process.env.API_URL + '/__typeowl'
+       * Point to ANY environment:
+       * - Local dev: 'http://localhost:3001/__typeowl'
+       * - Staging: 'https://staging-api.example.com/__typeowl'
+       * - Production: 'https://api.example.com/__typeowl'
+       * 
+       * Frontend devs can point to production and sync types
+       * without needing access to backend code!
        */
       source: process.env.TYPEOWL_API_URL || 'http://localhost:3001/__typeowl',
 
@@ -97,14 +107,20 @@ export default defineConfig({
    * Output directory for generated types.
    * Your code imports from this directory.
    * 
+   * RECOMMENDED: Commit this directory for:
+   * ✅ CI/CD builds without backend access
+   * ✅ Independent frontend/backend deploys
+   * ✅ Type changes visible in code reviews
+   * 
    * @default '.typeowl'
-   * @example import type { User } from './.typeowl'
    */
   output: './.typeowl',
 
   /**
    * Cache directory for offline fallback.
    * When the backend is down, TypeOwl uses cached types.
+   * 
+   * This should be gitignored (it's just local cache).
    * 
    * @default '.typeowl-cache'
    */

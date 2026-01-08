@@ -2,9 +2,18 @@
   <img src="./public/typeOwl.logo.png" alt="TypeOwl Logo" width="120" />
 </p>
 
-# TypeOwl Documentation Site
+# TypeOwl Documentation Site & Example Frontend
 
 A documentation website for TypeOwl with static HTML pages for SEO and a React app for interactive examples.
+
+## 🦉 TypeOwl in Action
+
+This frontend demonstrates TypeOwl's power features:
+
+- **No monorepo required** — This frontend is in a separate folder but gets types from the backend
+- **Types are committed** — Check `.typeowl/` — it's in the repo for independent deploys
+- **Point to any backend** — Configure `typeowl.config.ts` to use local, staging, or production
+- **On-demand sync** — Run `npx typeowl sync` whenever you want fresh types
 
 ## Structure
 
@@ -79,12 +88,27 @@ export default defineConfig({
   resolvers: [
     {
       name: 'api',
-      source: 'http://localhost:3001/__typeowl',
+      // Point to local dev, staging, or production!
+      source: process.env.TYPEOWL_API_URL || 'http://localhost:3001/__typeowl',
+      // Or directly: 'https://api.yourcompany.com/__typeowl'
     },
   ],
-  output: './.typeowl',
-  cache: './.typeowl-cache',
+  output: './.typeowl',   // Commit this for independent deploys!
+  cache: './.typeowl-cache', // Gitignore this (local cache only)
 });
+```
+
+## Deployment Strategy
+
+This example demonstrates the **recommended approach**: committing types.
+
+```bash
+# .gitignore
+.typeowl-cache/    # Only cache is gitignored
+# .typeowl/ is committed for:
+# ✅ CI/CD builds without backend access
+# ✅ Independent frontend deploys
+# ✅ Type changes visible in code reviews
 ```
 
 ## Adding New Static Pages

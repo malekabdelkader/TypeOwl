@@ -4,11 +4,26 @@ node_modules/
 # Build output
 dist/
 
-# TypeOwl generated (should be gitignored in projects using TypeOwl)
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🦉 TypeOwl - Type Management
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# For projects USING TypeOwl, we RECOMMEND committing .typeowl/ for:
+# ✅ Independent frontend/backend deploys
+# ✅ CI/CD builds without backend access
+# ✅ Guaranteed type compatibility at deploy time
+#
+# Only gitignore .typeowl-cache/ (local cache for offline fallback)
+#
+# This example repo gitignores .typeowl/ at root level (since it's the library itself)
+# but allows examples/frontend/.typeowl/ to demonstrate the recommended approach.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Library root - gitignore (this is the typeowl library, not a project using it)
 .typeowl/
 .typeowl-cache/
 
-# But allow examples/frontend/.typeowl/ for CI builds
+# But allow examples/frontend/.typeowl/ to demonstrate committing types
 !examples/frontend/.typeowl/
 examples/frontend/.typeowl-cache/
 

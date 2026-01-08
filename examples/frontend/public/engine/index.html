@@ -35,6 +35,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  
   <style>
     :root {
       --bg-primary: #0a0a0b;
@@ -256,6 +259,10 @@
       gap: 0.5rem;
     }
 
+    .arch-node-title i {
+      font-size: 0.9rem;
+    }
+
     .arch-node.backend .arch-node-title { color: var(--accent); }
     .arch-node.frontend .arch-node-title { color: var(--info); }
     .arch-node.success .arch-node-title { color: var(--success); }
@@ -429,6 +436,10 @@
       font-size: 1rem;
     }
 
+    .comparison-card h4 i {
+      font-size: 1rem;
+    }
+
     .comparison-card.before h4 { color: var(--error); }
     .comparison-card.after h4 { color: var(--success); }
 
@@ -463,8 +474,14 @@
     }
 
     .callout strong {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       margin-bottom: 0.25rem;
+    }
+
+    .callout strong i {
+      font-size: 1rem;
     }
 
     /* Architecture Box */
@@ -555,7 +572,7 @@
           <div class="arch-column-title">Backend</div>
           
           <div class="arch-node success">
-            <div class="arch-node-title">📁 src/types/*.ts</div>
+            <div class="arch-node-title"><i class="fa-solid fa-folder-open"></i> src/types/*.ts</div>
             <div class="arch-node-content">
               <div>type User = {...}</div>
               <div>type Blog = {...}</div>
@@ -565,7 +582,7 @@
           <div style="text-align: center; color: var(--text-muted);">↓</div>
           
           <div class="arch-node backend">
-            <div class="arch-node-title">⚙️ TypeOwl Extractor</div>
+            <div class="arch-node-title"><i class="fa-solid fa-gears"></i> TypeOwl Extractor</div>
             <div class="arch-node-content">
               <div>• Parse AST</div>
               <div>• Extract types</div>
@@ -576,7 +593,7 @@
           <div style="text-align: center; color: var(--text-muted);">↓</div>
           
           <div class="arch-node success">
-            <div class="arch-node-title">🌐 /__typeowl</div>
+            <div class="arch-node-title"><i class="fa-solid fa-globe"></i> /__typeowl</div>
             <div class="arch-node-content">
               <div>manifest.json</div>
               <div>types/*.d.ts</div>
@@ -591,7 +608,7 @@
             <div class="line"></div>
           </div>
           <div style="font-weight: 600; color: var(--accent); font-size: 0.85rem;">HTTP</div>
-          <div style="font-size: 0.75rem; color: var(--text-muted);">(dev-time)</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">(dev, CI/CD, or on-demand)</div>
           <div class="arch-arrow left">
             <div class="line"></div>
             <span>→</span>
@@ -603,7 +620,7 @@
           <div class="arch-column-title">Frontend</div>
           
           <div class="arch-node frontend">
-            <div class="arch-node-title">📄 typeowl.config.ts</div>
+            <div class="arch-node-title"><i class="fa-solid fa-file-code"></i> typeowl.config.ts</div>
             <div class="arch-node-content">
               <div>resolvers: [...]</div>
               <div>output: .typeowl</div>
@@ -613,7 +630,7 @@
           <div style="text-align: center; color: var(--text-muted);">↓</div>
           
           <div class="arch-node frontend">
-            <div class="arch-node-title">🔄 TypeOwl Client</div>
+            <div class="arch-node-title"><i class="fa-solid fa-arrows-rotate"></i> TypeOwl Client</div>
             <div class="arch-node-content">
               <div>• Fetch manifest</div>
               <div>• Compare hashes</div>
@@ -624,7 +641,7 @@
           <div style="text-align: center; color: var(--text-muted);">↓</div>
           
           <div class="arch-node frontend">
-            <div class="arch-node-title">📦 .typeowl/</div>
+            <div class="arch-node-title"><i class="fa-solid fa-box"></i> .typeowl/</div>
             <div class="arch-node-content">
               <div>index.d.ts</div>
               <div>content.d.ts</div>
@@ -635,7 +652,7 @@
       </div>
     </div>
 
-    <h2><span class="icon">🔍</span> Step 1: Type Extraction</h2>
+    <h2><span class="icon"><i class="fa-solid fa-magnifying-glass"></i></span> Step 1: Type Extraction</h2>
     <p>
       TypeOwl parses your TypeScript files using the TypeScript compiler API to extract type definitions. 
       This happens at runtime when the server starts, not at build time.
@@ -679,7 +696,7 @@
 }</div>
     </div>
 
-    <h2><span class="icon">📋</span> Step 2: Manifest Generation</h2>
+    <h2><span class="icon"><i class="fa-solid fa-file-lines"></i></span> Step 2: Manifest Generation</h2>
     <p>
       TypeOwl generates a lightweight JSON manifest that describes all available type files. 
       Each file is identified by a content hash for efficient change detection.
@@ -712,7 +729,7 @@
 }</div>
     </div>
 
-    <h2><span class="icon">🔄</span> Step 3: Hash Comparison (Incremental Sync)</h2>
+    <h2><span class="icon"><i class="fa-solid fa-arrows-rotate"></i></span> Step 3: Hash Comparison (Incremental Sync)</h2>
     <p>
       This is where TypeOwl shines. Instead of downloading all type files every time, 
       the client compares hashes to detect changes:
@@ -751,7 +768,7 @@
 
     <div class="comparison">
       <div class="comparison-card before">
-        <h4>❌ Without Hash Comparison</h4>
+        <h4><i class="fa-solid fa-xmark"></i> Without Hash Comparison</h4>
         <ul>
           <li>Download all 10 type files every sync</li>
           <li>~50KB transferred each time</li>
@@ -760,7 +777,7 @@
         </ul>
       </div>
       <div class="comparison-card after">
-        <h4>✅ With Hash Comparison</h4>
+        <h4><i class="fa-solid fa-check"></i> With Hash Comparison</h4>
         <ul>
           <li>Download only 1 changed file</li>
           <li>~1KB manifest + 5KB changed file</li>
@@ -789,7 +806,7 @@
 }</div>
     </div>
 
-    <h2><span class="icon">⚡</span> Step 4: Zod Integration (Optional)</h2>
+    <h2><span class="icon"><i class="fa-solid fa-bolt"></i></span> Step 4: Zod Integration (Optional)</h2>
     <p>
       When you use <code>typeowl.endpoint()</code> with Zod schemas, TypeOwl does two things:
     </p>
@@ -840,7 +857,7 @@ z.object({
       </div>
     </div>
 
-    <h2><span class="icon">🗺️</span> Step 5: ApiEndpoints Type Map</h2>
+    <h2><span class="icon"><i class="fa-solid fa-map"></i></span> Step 5: ApiEndpoints Type Map</h2>
     <p>
       TypeOwl automatically generates an <code>ApiEndpoints</code> interface that maps every 
       registered endpoint to its types:
@@ -884,7 +901,7 @@ z.object({
 }); <span class="comment">// User - body is type-checked!</span></div>
     </div>
 
-    <h2><span class="icon">🔐</span> Security Model</h2>
+    <h2><span class="icon"><i class="fa-solid fa-shield-halved"></i></span> Security Model</h2>
     <p>TypeOwl includes several security features:</p>
 
     <div class="arch-box">
@@ -915,12 +932,13 @@ extractAndRegister(<span class="string">'./src/secrets/passwords.ts'</span>)
     </div>
 
     <div class="callout callout-info">
-      <strong>💡 Remember</strong>
-      TypeOwl is designed for development-time type sharing. In production, types are already 
-      compiled into your frontend bundle — there's no runtime dependency on the TypeOwl endpoints.
+      <strong><i class="fa-solid fa-lightbulb"></i> When do types get synced?</strong>
+      You decide! Sync during development, in CI/CD pipelines, or on-demand before deploying.
+      Once synced and committed, types are baked into your codebase — no runtime dependency on TypeOwl endpoints.
+      This enables independent frontend and backend deploys.
     </div>
 
-    <h2><span class="icon">📊</span> Performance Characteristics</h2>
+    <h2><span class="icon"><i class="fa-solid fa-chart-simple"></i></span> Performance Characteristics</h2>
 
     <table style="width: 100%; border-collapse: collapse; margin: 1.5rem 0;">
       <thead>
@@ -960,7 +978,7 @@ extractAndRegister(<span class="string">'./src/secrets/passwords.ts'</span>)
     </table>
 
     <div class="callout callout-warning">
-      <strong>⚡ Pro Tip</strong>
+      <strong><i class="fa-solid fa-bolt"></i> Pro Tip</strong>
       Type extraction happens once when the server starts. After that, generated types are cached 
       in memory and served instantly.
     </div>
