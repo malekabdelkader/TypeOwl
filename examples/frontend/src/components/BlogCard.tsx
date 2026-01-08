@@ -1,4 +1,4 @@
-import type { Blog, BlogInput } from '@typeowl';
+import type { Blog, BlogInput } from 'typeowl/types';
 import { useState } from 'react';
 import { api } from '../api';
 

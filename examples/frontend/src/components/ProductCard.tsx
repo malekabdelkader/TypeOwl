@@ -1,4 +1,4 @@
-import type { Product } from '@typeowl';
+import type { Product } from 'typeowl/types';
 
 export function ProductCard({ product }: { product: Product }) {
   return (

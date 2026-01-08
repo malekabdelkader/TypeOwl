@@ -5,7 +5,7 @@ import type {
   Blog,                           // 🟡 Static type from src/types/
   GetApiUsersResponse,            // 🟢 Array type from typeowl.endpoint()
   Product,
-} from '@typeowl';
+} from 'typeowl/types';
 
 // API client with 3 fetch methods
 import { api, rawFetch, typedFetch, type HealthResponse } from './api';

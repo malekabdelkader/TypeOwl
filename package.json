@@ -1,6 +1,6 @@
 {
   "name": "typeowl",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "🦉 Runtime type synchronization between backend and frontend — types that fly across repos",
   "type": "module",
   "main": "dist/index.js",
@@ -20,6 +20,9 @@
     "./client": {
       "types": "./dist/client/index.d.ts",
       "import": "./dist/client/index.js"
+    },
+    "./types": {
+      "types": "./dist/types-placeholder.d.ts"
     }
   },
   "files": [

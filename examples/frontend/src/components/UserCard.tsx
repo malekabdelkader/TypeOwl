@@ -1,4 +1,4 @@
-import type { GetApiUsersByIdResponse as User } from '@typeowl';
+import type { GetApiUsersByIdResponse as User } from 'typeowl/types';
 
 const roleColors = {
   admin: '#f59e0b',

@@ -491,6 +491,7 @@
           <li><a href="#client-config">Client Config</a></li>
           <li><a href="#syncing">Syncing Types</a></li>
           <li><a href="#using-types">Using Types</a></li>
+          <li><a href="#tsconfig-setup">TypeScript Setup</a></li>
           <li><a href="#api-client">API Client</a></li>
         </ul>
       </div>
@@ -800,16 +801,68 @@ npx typeowl watch --interval 30</div>
       </div>
 
       <h2 id="using-types">Using Types</h2>
-      <p>Import synced types in your frontend:</p>
+      <p>Import synced types in your frontend. First, configure your <code>tsconfig.json</code>:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">tsconfig.json</span>
+        </div>
+        <div class="code-content">{
+  <span class="string">"compilerOptions"</span>: {
+    <span class="string">"paths"</span>: {
+      <span class="string">"typeowl/types"</span>: [<span class="string">"./.typeowl/index.d.ts"</span>]
+    }
+  },
+  <span class="string">"include"</span>: [<span class="string">"src"</span>, <span class="string">".typeowl"</span>]
+}</div>
+      </div>
+
+      <p>Then import your types:</p>
 
       <div class="code-block">
         <div class="code-header">
           <span class="filename">src/App.tsx</span>
         </div>
-        <div class="code-content"><span class="keyword">import</span> <span class="keyword">type</span> { <span class="type">User</span>, <span class="type">Blog</span>, <span class="type">ApiEndpoints</span> } <span class="keyword">from</span> <span class="string">'@typeowl'</span>;
+        <div class="code-content"><span class="keyword">import</span> <span class="keyword">type</span> { <span class="type">User</span>, <span class="type">Blog</span>, <span class="type">ApiEndpoints</span> } <span class="keyword">from</span> <span class="string">'typeowl/types'</span>;
 
 <span class="comment">// Full autocomplete! ✨</span>
 <span class="keyword">const</span> users: <span class="type">User</span>[] = <span class="keyword">await</span> fetch(<span class="string">'/api/users'</span>).then(r => r.json());</div>
+      </div>
+
+      <div class="callout callout-info">
+        <strong>💡 Why typeowl/types?</strong>
+        TypeOwl ships with a placeholder at <code>typeowl/types</code> that provides empty types before you run sync. After configuring your tsconfig paths, the placeholder gets overridden with your actual generated types.
+      </div>
+
+      <h2 id="tsconfig-setup">TypeScript Setup</h2>
+      <p>Configure your <code>tsconfig.json</code> to enable type imports:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">tsconfig.json</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('{&quot;compilerOptions&quot;:{&quot;paths&quot;:{&quot;typeowl/types&quot;:[&quot;./.typeowl/index.d.ts&quot;]}},&quot;include&quot;:[&quot;src&quot;,&quot;.typeowl&quot;]}')">Copy</button>
+        </div>
+        <div class="code-content">{
+  <span class="string">"compilerOptions"</span>: {
+    <span class="comment">// ... your existing options</span>
+    <span class="string">"paths"</span>: {
+      <span class="string">"typeowl/types"</span>: [<span class="string">"./.typeowl/index.d.ts"</span>]
+    }
+  },
+  <span class="comment">// Include the generated types directory</span>
+  <span class="string">"include"</span>: [<span class="string">"src"</span>, <span class="string">".typeowl"</span>]
+}</div>
+      </div>
+
+      <p>Now you can import your types:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">src/App.tsx</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> <span class="keyword">type</span> { <span class="type">User</span>, <span class="type">ApiEndpoints</span> } <span class="keyword">from</span> <span class="string">'typeowl/types'</span>;
+
+<span class="comment">// Full autocomplete and type safety! ✨</span></div>
       </div>
 
       <h2 id="api-client">Building an API Client</h2>
@@ -819,7 +872,7 @@ npx typeowl watch --interval 30</div>
         <div class="code-header">
           <span class="filename">src/api/client.ts</span>
         </div>
-        <div class="code-content"><span class="keyword">import</span> <span class="keyword">type</span> { <span class="type">ApiEndpoints</span> } <span class="keyword">from</span> <span class="string">'@typeowl'</span>;
+        <div class="code-content"><span class="keyword">import</span> <span class="keyword">type</span> { <span class="type">ApiEndpoints</span> } <span class="keyword">from</span> <span class="string">'typeowl/types'</span>;
 
 <span class="keyword">type</span> <span class="type">GetPath</span> = <span class="type">ExtractPaths</span>&lt;<span class="string">'GET'</span>&gt;;
 

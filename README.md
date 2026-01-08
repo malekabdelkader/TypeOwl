@@ -72,7 +72,7 @@ interface User {
 │                                                                 │
 │   1. typeowl sync       ← Fetches manifest, compares hashes    │
 │   2. Downloads changed type files only (incremental!)          │
-│   3. import type { User } from '@typeowl'  ← Full autocomplete!│
+│   3. import type { User } from 'typeowl/types'  ← Full autocomplete!│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -232,21 +232,23 @@ npx typeowl watch --interval 10
 {
   "compilerOptions": {
     "paths": {
-      "@typeowl": ["./.typeowl/index.d.ts"],
-      "@typeowl/*": ["./.typeowl/*"]
+      "typeowl/types": ["./.typeowl/index.d.ts"]
     }
-  }
+  },
+  "include": ["src", ".typeowl"]
 }
 ```
 
 **5. Use in your frontend:**
 
 ```typescript
-import type { User, Blog, Product, ApiEndpoints } from '@typeowl';
+import type { User, Blog, Product, ApiEndpoints } from 'typeowl/types';
 
 // Full autocomplete and type safety! ✨
 const users: User[] = await fetch('/api/users').then(r => r.json());
 ```
+
+> 💡 **Tip**: TypeOwl ships with a placeholder at `typeowl/types`. After running `npx typeowl sync` and configuring your tsconfig paths, the placeholder gets overridden with your actual generated types.
 
 ## Three Ways to Define Types
 
@@ -283,7 +285,7 @@ extract: {
 }
 
 // Frontend: Force-cast with exposed type
-import type { Blog } from '@typeowl';
+import type { Blog } from 'typeowl/types';
 const blogs = await fetch('/api/blogs').then(r => r.json()) as Blog[];
 ```
 
@@ -310,7 +312,7 @@ typeowl.endpoint(app, 'GET', '/api/products', {
 }, async () => products);
 
 // Frontend: Fully typed ApiEndpoints
-import type { ApiEndpoints } from '@typeowl';
+import type { ApiEndpoints } from 'typeowl/types';
 // ApiEndpoints['GET /api/users'] = { response: User[] }
 // ApiEndpoints['POST /api/users'] = { body: CreateUser; response: User }
 ```
@@ -321,7 +323,7 @@ Use the generated `ApiEndpoints` to build a fully typed fetch wrapper:
 
 ```typescript
 // api/client.ts
-import type { ApiEndpoints } from '@typeowl';
+import type { ApiEndpoints } from 'typeowl/types';
 
 type ExtractPaths<Method extends string> = {
   [K in keyof ApiEndpoints]: K extends `${Method} ${infer Path}` ? Path : never;

@@ -7,7 +7,7 @@ export default defineConfig({
   
   resolve: {
     alias: {
-      '@typeowl': path.resolve(__dirname, './.typeowl'),
+      'typeowl/types': path.resolve(__dirname, './.typeowl'),
     },
   },
   

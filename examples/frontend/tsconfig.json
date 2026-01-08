@@ -16,8 +16,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@typeowl": ["./.typeowl/index.d.ts"],
-      "@typeowl/*": ["./.typeowl/*"]
+      "typeowl/types": ["./.typeowl/index.d.ts"]
     }
   },
   "include": ["src", ".typeowl", "typeowl.config.ts"]

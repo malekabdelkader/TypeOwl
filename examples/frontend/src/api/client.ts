@@ -7,7 +7,7 @@
  * 🟢 api.*      - Full type safety via typeowl.endpoint()
  */
 
-import type { ApiEndpoints } from '@typeowl';
+import type { ApiEndpoints } from 'typeowl/types';
 import type { ApiError } from './types';
 
 // ═══════════════════════════════════════════════════════════════════════════
