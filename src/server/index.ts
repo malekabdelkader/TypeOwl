@@ -189,6 +189,7 @@ export class TypeRegistry {
    * Register a type from a Zod schema
    * 
    * @requires zod - Install with: npm install zod
+   * @throws Error if type name conflicts with existing type
    */
   registerZod<T extends z.ZodType>(name: string, schema: T): this {
     // Validate Zod is installed
@@ -197,6 +198,13 @@ export class TypeRegistry {
     const typeDef = zodToTypeDefinition(schema);
     this.registerTypeInDomain(name, typeDef);
     return this;
+  }
+
+  /**
+   * Capitalize first letter
+   */
+  private capitalize(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
   /**
@@ -294,8 +302,82 @@ export class TypeRegistry {
 
   private registerTypeInDomain(name: string, definition: TypeDefinition): void {
     const domain = this.domains.get(this.currentDomain)!;
+    
+    // Check for name conflicts
+    if (domain.types[name]) {
+      const existingHash = this.hashTypeDefinition(domain.types[name]);
+      const newHash = this.hashTypeDefinition(definition);
+      
+      if (existingHash === newHash) {
+        // Same structure, skip silently
+        return;
+      }
+      
+      // Different structure with same name - ERROR with suggested fix
+      const suggestedName = this.suggestAlternativeName(name);
+      throw new Error(
+        `\n[TypeOwl] ❌ Type name conflict in domain "${this.currentDomain}":\n\n` +
+        `  Type "${name}" already exists with a different structure.\n\n` +
+        `  💡 Suggested fix: Rename one of the types to "${suggestedName}"\n\n` +
+        `  This can happen when:\n` +
+        `  • Static types and endpoint types have the same name\n` +
+        `  • Multiple endpoints generate types with the same name\n` +
+        `  • Nested types conflict with existing types\n`
+      );
+    }
+    
+    // Register the type
     domain.types[name] = definition;
     this.invalidateCache(this.currentDomain);
+  }
+
+  /**
+   * Suggest an alternative name for a conflicting type
+   */
+  private suggestAlternativeName(name: string): string {
+    // Try adding domain prefix
+    if (this.currentDomain !== 'main' && !name.startsWith(this.capitalize(this.currentDomain))) {
+      return this.capitalize(this.currentDomain) + name;
+    }
+    // Try adding a number suffix
+    let counter = 2;
+    while (this.hasType(name + counter, this.currentDomain)) {
+      counter++;
+    }
+    return name + counter;
+  }
+
+  /**
+   * Hash a type definition for comparison
+   */
+  private hashTypeDefinition(def: TypeDefinition): string {
+    return createHash('md5').update(JSON.stringify(def)).digest('hex').slice(0, 12);
+  }
+
+  /**
+   * Check if a type with this name exists in a domain
+   */
+  hasType(name: string, domain?: string): boolean {
+    if (domain) {
+      const d = this.domains.get(domain);
+      return d ? name in d.types : false;
+    }
+    for (const d of this.domains.values()) {
+      if (name in d.types) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get a type definition by name (searches all domains)
+   */
+  getType(name: string): { domain: string; definition: TypeDefinition } | null {
+    for (const [domainName, domain] of this.domains) {
+      if (name in domain.types) {
+        return { domain: domainName, definition: domain.types[name] };
+      }
+    }
+    return null;
   }
 
   private invalidateCache(domain: string): void {
