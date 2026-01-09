@@ -488,9 +488,11 @@
         <div class="sidebar-title">Backend</div>
         <ul class="sidebar-links">
           <li><a href="#server-config">Server Config</a></li>
+          <li><a href="#route-api">route.get() <i class="fa-solid fa-star" style="color: var(--accent);"></i></a></li>
           <li><a href="#type-extraction">Type Extraction</a></li>
-          <li><a href="#endpoints">Endpoint Registration</a></li>
+          <li><a href="#endpoints">typeowl.endpoint()</a></li>
           <li><a href="#zod-validation">Zod Validation</a></li>
+          <li><a href="#static-only">Static Only</a></li>
         </ul>
       </div>
 
@@ -531,13 +533,13 @@
         </div>
         <div class="code-content">npm install typeowl
 
-<span class="comment"># Optional: Install Zod for runtime validation</span>
+<span class="comment"># Required for route.get() and typeowl.endpoint() validation</span>
 npm install zod</div>
       </div>
 
       <div class="callout callout-info">
-        <strong><i class="fa-solid fa-lightbulb"></i> Zod is optional!</strong>
-        You can use TypeOwl without Zod for static type extraction. Zod is only needed for <code>typeowl.endpoint()</code> runtime validation.
+        <strong><i class="fa-solid fa-lightbulb"></i> Zod is required for the recommended approach</strong>
+        The recommended <code>route.get()</code> API uses Zod schemas for validation and type inference. Static type extraction (Option 2) works without Zod.
       </div>
 
       <h2 id="quick-start">Quick Start</h2>
@@ -713,8 +715,47 @@ npx typeowl watch -i 30</div>
 }</div>
       </div>
 
-      <h2 id="endpoints">Endpoint Registration</h2>
-      <p>Use <code>typeowl.endpoint()</code> to register API routes with type safety:</p>
+      <h2 id="route-api">route.get() — Multi-Framework <i class="fa-solid fa-star" style="color: var(--accent);"></i></h2>
+      <p>The <strong>recommended</strong> way to define API types. Works with Fastify, Express, Hono, Next.js, and Koa:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">server.ts</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> { z } <span class="keyword">from</span> <span class="string">'zod'</span>;
+<span class="keyword">import</span> { route } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
+
+<span class="comment">// Define routes (framework-agnostic!)</span>
+<span class="keyword">const</span> getUsers = route.<span class="function">get</span>(<span class="string">'/api/users'</span>)
+  .<span class="function">returns</span>(z.<span class="function">array</span>(UserSchema));
+
+<span class="keyword">const</span> createUser = route.<span class="function">post</span>(<span class="string">'/api/users'</span>)
+  .<span class="function">withBody</span>(CreateUserSchema)
+  .<span class="function">returns</span>(UserSchema);
+
+<span class="comment">// Wire up with your framework (Fastify, Express, Hono, Next.js, Koa)</span>
+app.<span class="function">get</span>(getUsers.path, <span class="keyword">async</span> () => {
+  <span class="keyword">return</span> getUsers.<span class="function">response</span>(users);
+});
+
+app.<span class="function">post</span>(createUser.path, <span class="keyword">async</span> (request, reply) => {
+  <span class="keyword">const</span> input = createUser.<span class="function">body</span>(request.body);  <span class="comment">// Validates with Zod!</span>
+  <span class="keyword">return</span> createUser.<span class="function">response</span>(newUser);
+});</div>
+      </div>
+
+      <div class="callout callout-success">
+        <strong><i class="fa-solid fa-check-circle"></i> Why route.get() is recommended:</strong>
+        <ul style="margin-top: 0.5rem; padding-left: 1.25rem;">
+          <li>Multi-framework — works with Fastify, Express, Hono, Next.js, Koa</li>
+          <li>Zod validation — validates params, body, query, and response</li>
+          <li>Type inference — full TypeScript support with autocomplete</li>
+          <li>Reusable — define once, wire up with your framework</li>
+        </ul>
+      </div>
+
+      <h2 id="endpoints">typeowl.endpoint() — Framework-Specific</h2>
+      <p>Alternative approach that passes the app instance directly:</p>
 
       <div class="code-block">
         <div class="code-header">
@@ -748,6 +789,55 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</
       <div class="callout callout-success">
         <strong><i class="fa-solid fa-check"></i> Best Practice</strong>
         Use Zod for body/params validation, and type references for responses. This gives you validation where it matters most (user input) without runtime overhead for responses.
+      </div>
+
+      <h2 id="static-only">Static Extraction Only (No Endpoints)</h2>
+      <p>
+        Don't need API contracts or validation? You can use TypeOwl purely for <strong>type sharing</strong> — 
+        just extract types from your backend files and sync them to the frontend. No copy/paste needed.
+      </p>
+
+      <div class="callout callout-info">
+        <strong><i class="fa-solid fa-lightbulb"></i> When to use static-only:</strong>
+        <ul style="margin-top: 0.5rem; padding-left: 1.25rem;">
+          <li>You just want to stop copy/pasting types between repos</li>
+          <li>You don't need API endpoint mapping or validation</li>
+          <li>You want the simplest possible setup (no Zod required)</li>
+        </ul>
+      </div>
+
+      <p><strong>Setup:</strong> Create a dedicated folder (e.g., <code>src/types/</code>) for your shared types:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">typeowl.server.config.ts</span>
+        </div>
+        <div class="code-content"><span class="keyword">export default</span> <span class="function">defineServerConfig</span>({
+  version: <span class="string">'1.0.0'</span>,
+  typeSources: <span class="string">'./src/types/'</span>,
+  
+  <span class="comment">// Just extract types — no endpoints needed!</span>
+  extract: {
+    content: { from: <span class="string">'./src/types/'</span>, types: <span class="string">'*'</span> },
+  },
+});</div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">frontend/api.ts</span>
+        </div>
+        <div class="code-content"><span class="comment">// Types auto-imported — no copy/paste!</span>
+<span class="keyword">import</span> <span class="keyword">type</span> { <span class="type">User</span>, <span class="type">Product</span> } <span class="keyword">from</span> <span class="string">'typeowl/types'</span>;
+
+<span class="comment">// You handle the API calls yourself</span>
+<span class="keyword">const</span> users = <span class="keyword">await</span> <span class="function">fetch</span>(<span class="string">'/api/users'</span>).<span class="function">then</span>(r => r.<span class="function">json</span>()) <span class="keyword">as</span> <span class="type">User</span>[];</div>
+      </div>
+
+      <div class="callout" style="border-left-color: var(--text-muted);">
+        <strong><i class="fa-solid fa-triangle-exclamation"></i> No API contract:</strong>
+        Static extraction shares types but doesn't guarantee your API actually returns those types.
+        For full type safety with validation, use <a href="#route-api" style="color: var(--accent);">route.get()</a> or <a href="#endpoints" style="color: var(--accent);">typeowl.endpoint()</a>.
       </div>
 
       <h2 id="client-config">Client Configuration</h2>

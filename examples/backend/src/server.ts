@@ -1,16 +1,12 @@
 /**
  * 🦉 TypeOwl Example Backend
  * 
- * Demonstrates THREE ways to define API types:
+ * Demonstrates FOUR ways to define API types:
  * 
  * 🔴 OPTION 1: No TypeOwl - Raw handlers, no type exposure
- *    → Frontend uses `any` or manual types
- * 
  * 🟡 OPTION 2: Static types only - Types extracted from src/types/
- *    → Frontend can force-cast using exposed static types
- * 
- * 🟢 OPTION 3: typeowl.endpoint() - Full type generation + validation
- *    → Frontend gets auto-generated endpoint types
+ * 🟢 OPTION 3: typeowl.endpoint() - Full type generation + validation (coupled to app)
+ * 🔵 OPTION 4: route.get() - Framework-agnostic Zod validation (NEW!)
  * 
  * Run: npm run dev
  */
@@ -18,25 +14,43 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { z } from 'zod';
-import { initTypeOwl } from 'typeowl/server';
+import { initTypeOwl, route } from 'typeowl/server';
 
-// Import types from our types folder (for use in this file)
+// Import types from our types folder
 import type { Blog, Product } from './types/index.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🦉 TYPEOWL - Auto-loads from typeowl.server.config.ts
+// 📦 ZOD SCHEMAS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const typeowl = await initTypeOwl();
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📦 ZOD SCHEMAS (for typeowl.endpoint validation)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Common params schema
 const IdParamsSchema = z.object({ id: z.string() });
 
-// User schemas
+const BlogSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  content: z.string(),
+  published: z.boolean(),
+  createdAt: z.string(),
+});
+
+const BlogInputSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  content: z.string().min(10, 'Content must be at least 10 characters'),
+});
+
+const ProductSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  price: z.number(),
+  description: z.string().optional(),
+  inStock: z.boolean(),
+});
+
+const ProductQuerySchema = z.object({
+  search: z.string().optional(),
+  limit: z.coerce.number().optional(),
+});
+
 const UserSchema = z.object({
   id: z.string(),
   email: z.string().email(),
@@ -50,11 +64,51 @@ const CreateUserSchema = z.object({
   role: z.enum(['admin', 'user', 'guest']).default('user'),
 });
 
-// Health check (untyped endpoint)
-const HealthSchema = z.object({
-  status: z.string(),
-  timestamp: z.string(),
-});
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔵 OPTION 4: route.get() - Framework-agnostic with Zod (NEW!)
+// ═══════════════════════════════════════════════════════════════════════════
+// Define routes ONCE, wire up with your framework
+// Zod provides runtime validation + TypeOwl extracts types automatically.
+
+const getBlogs = route.get('/api/blogs')
+  .returns(z.array(BlogSchema));
+
+const getBlogById = route.get('/api/blogs/:id')
+  .withParams(IdParamsSchema)
+  .returns(BlogSchema.nullable());
+
+const createBlog = route.post('/api/blogs')
+  .withBody(BlogInputSchema)
+  .returns(BlogSchema);
+
+const getProducts = route.get('/api/products')
+  .withQuery(ProductQuerySchema)
+  .returns(z.array(ProductSchema));
+
+const getProductById = route.get('/api/products/:id')
+  .withParams(IdParamsSchema)
+  .returns(ProductSchema.nullable());
+
+const getUsers = route.get('/api/users')
+  .returns(z.array(UserSchema));
+
+const getUserById = route.get('/api/users/:id')
+  .withParams(IdParamsSchema)
+  .returns(UserSchema.nullable());
+
+const createUser = route.post('/api/users')
+  .withBody(CreateUserSchema)
+  .returns(UserSchema);
+
+const deleteUser = route.del('/api/users/:id')
+  .withParams(IdParamsSchema)
+  .returns(z.object({ success: z.boolean(), message: z.string() }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🦉 TYPEOWL
+// ═══════════════════════════════════════════════════════════════════════════
+
+const typeowl = await initTypeOwl();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🌐 FASTIFY SERVER
@@ -63,8 +117,6 @@ const HealthSchema = z.object({
 const app = Fastify({ logger: false });
 
 await app.register(cors, { origin: true });
-
-// Mount TypeOwl routes (from config)
 await typeowl.mount(app);
 
 // ─── Sample Data ─────────────────────────────────────────────────────────────
@@ -86,117 +138,148 @@ const users: User[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🔴 OPTION 1: No TypeOwl - Raw Fastify handlers
+// 🔴 OPTION 1: No TypeOwl - Raw handler
 // ═══════════════════════════════════════════════════════════════════════════
-// These endpoints are NOT registered with TypeOwl.
-// Frontend must use `any` or define types manually.
 
 app.get('/api/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🟡 OPTION 2: Static types only - Types exposed via extract config
+// 🔵 OPTION 4: route.get() handlers - Framework-agnostic!
 // ═══════════════════════════════════════════════════════════════════════════
-// Blog type is extracted from src/types/Blog.ts via typeowl.server.config.ts
-// The TYPE is exposed, but endpoints are NOT mapped.
-// Frontend can force-cast responses using the exposed Blog type.
+// Use .path for route, .params()/.body()/.query() for validation, .response() for type-checking
 
-app.get('/api/blogs', async () => blogs);
+// GET /api/blogs
+app.get(getBlogs.path, async () => {
+  return getBlogs.response(blogs);
+});
 
-app.get('/api/blogs/:id', async (request, reply) => {
-  const { id } = request.params as { id: string };
+// GET /api/blogs/:id
+app.get(getBlogById.path, async (request, reply) => {
+  const { id } = getBlogById.params(request.params);  // Validates with Zod!
   const blog = blogs.find(b => b.id === id);
-  if (!blog) return reply.code(404).send({ error: 'Blog not found' });
-  return blog;
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🟢 OPTION 3: typeowl.endpoint() - Full type generation + validation
-// ═══════════════════════════════════════════════════════════════════════════
-// These endpoints have AUTOMATIC validation and type registration!
-// Schemas are extracted to TypeOwl AND used for runtime validation.
-// Frontend gets fully typed ApiEndpoints with body/params/response.
-
-// GET /api/users - List all users
-typeowl.endpoint(app, 'GET', '/api/users', {
-  response: z.array(UserSchema),
-  description: 'List all users',
-}, async () => {
-  return users;
-});
-
-// GET /api/users/:id - Get user by ID
-typeowl.endpoint(app, 'GET', '/api/users/:id', {
-  params: IdParamsSchema,
-  response: UserSchema,
-  description: 'Get user by ID',
-}, async ({ params, reply }) => {
-  const user = users.find(u => u.id === params.id);
-  if (!user) {
-    (reply as { code: (n: number) => { send: (d: unknown) => void } }).code(404).send({ error: 'User not found' });
-    return undefined as never;
+  if (!blog) {
+    reply.code(404).send({ error: 'Blog not found' });
+    return null;
   }
-  return user;
+  return getBlogById.response(blog);
 });
 
-// POST /api/users - Create user (with body validation!)
-typeowl.endpoint(app, 'POST', '/api/users', {
-  body: CreateUserSchema,
-  response: UserSchema,
-  description: 'Create a new user',
-}, async ({ body }) => {
-  // body is already validated and typed as { email: string, name: string, role: 'admin'|'user'|'guest' }
-  const newUser: User = {
-    id: String(users.length + 1),
-    email: body.email,
-    name: body.name,
-    role: body.role,
-  };
-  users.push(newUser);
-  return newUser;
+// POST /api/blogs
+app.post(createBlog.path, async (request, reply) => {
+  try {
+    const input = createBlog.body(request.body);  // Validates with Zod!
+    const newBlog: Blog = {
+      id: String(blogs.length + 1),
+      title: input.title,
+      content: input.content,
+      published: false,
+      createdAt: new Date().toISOString(),
+    };
+    blogs.push(newBlog);
+    return createBlog.response(newBlog);
+  } catch (err) {
+    // ZodError - validation failed
+    reply.code(400).send({ error: (err as Error).message });
+    return null;
+  }
 });
 
-// DELETE /api/users/:id - Delete user
-typeowl.endpoint(app, 'DELETE', '/api/users/:id', {
-  params: IdParamsSchema,
-  response: z.object({ success: z.boolean(), message: z.string() }),
-  description: 'Delete a user',
-}, async ({ params, reply }) => {
-  const index = users.findIndex(u => u.id === params.id);
+// GET /api/products
+app.get(getProducts.path, async (request) => {
+  const { search, limit } = getProducts.query(request.query ?? {});  // Validates!
+  let result = products;
+  if (search) {
+    result = result.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  }
+  if (limit) {
+    result = result.slice(0, limit);
+  }
+  return getProducts.response(result);
+});
+
+// GET /api/products/:id
+app.get(getProductById.path, async (request, reply) => {
+  const { id } = getProductById.params(request.params);
+  const product = products.find(p => p.id === id);
+  if (!product) {
+    reply.code(404).send({ error: 'Product not found' });
+    return null;
+  }
+  return getProductById.response(product);
+});
+
+// GET /api/users
+app.get(getUsers.path, async () => {
+  return getUsers.response(users);
+});
+
+// GET /api/users/:id
+app.get(getUserById.path, async (request, reply) => {
+  const { id } = getUserById.params(request.params);
+  const user = users.find(u => u.id === id);
+  if (!user) {
+    reply.code(404).send({ error: 'User not found' });
+    return null;
+  }
+  return getUserById.response(user);
+});
+
+// POST /api/users
+app.post(createUser.path, async (request, reply) => {
+  try {
+    const input = createUser.body(request.body);  // Validates with Zod!
+    const newUser: User = {
+      id: String(users.length + 1),
+      email: input.email,
+      name: input.name,
+      role: input.role,
+    };
+    users.push(newUser);
+    return createUser.response(newUser);
+  } catch (err) {
+    reply.code(400).send({ error: (err as Error).message });
+    return null;
+  }
+});
+
+// DELETE /api/users/:id
+app.delete(deleteUser.path, async (request, reply) => {
+  const { id } = deleteUser.params(request.params);
+  const index = users.findIndex(u => u.id === id);
   if (index === -1) {
-    (reply as { code: (n: number) => { send: (d: unknown) => void } }).code(404).send({ error: 'User not found' });
-    return undefined as never;
+    reply.code(404).send({ error: 'User not found' });
+    return null;
   }
   users.splice(index, 1);
-  return { success: true, message: 'User deleted' };
+  return deleteUser.response({ success: true, message: 'User deleted' });
 });
-// POST /api/blogs - Create a new blog
-typeowl.endpoint(app, 'POST', '/api/blogs', {
-  body:'BlogInput',
-  response: 'Blog',
-  description: 'Create a new blog',
-}, async ({ body }) => console.log(body));
 
-// GET /api/products - List all products
-typeowl.endpoint(app, 'GET', '/api/products', {
-  response: 'Product[]',
-  description: 'List all products',
-}, async () => products);
+// ═══════════════════════════════════════════════════════════════════════════
+// 🟡 OPTION 2: Static types only - Types exposed via extract config
+// ═══════════════════════════════════════════════════════════════════════════
+// Blog and Product types are extracted from src/types/ via typeowl.server.config.ts
+// Types are exposed at /__typeowl/types/content.d.ts but endpoints are NOT mapped.
+// Frontend can import and use the types with force-casting.
+// (The actual handlers for /api/blogs and /api/products are in Option 4 above)
 
-// GET /api/products/:id - Get product by ID
-typeowl.endpoint(app, 'GET', '/api/products/:id', {
-  params: IdParamsSchema,
-  response: 'Product | null',  // Using extracted type reference!
-  description: 'Get product by ID',
-}, async ({ params, reply }) => {
-  const product = products.find(p => p.id === params.id);
-  if (!product) {
-    (reply as { code: (n: number) => { send: (d: unknown) => void } }).code(404).send({ error: 'Product not found' });
-    return undefined as never;
-  }
-  return product;
-});
+// ═══════════════════════════════════════════════════════════════════════════
+// 🟢 OPTION 3: typeowl.endpoint() - Framework-specific alternative
+// ═══════════════════════════════════════════════════════════════════════════
+// If you prefer passing the app instance directly:
+//
+// typeowl.endpoint(app, 'GET', '/api/example', {
+//   response: z.object({ message: z.string() }),
+// }, async () => ({ message: 'Hello!' }));
+//
+// typeowl.endpoint(app, 'POST', '/api/example', {
+//   body: z.object({ name: z.string() }),
+//   response: ',
+// }, async ({ body }) => ({ greeting: `Hello, ${body.name}!` }));
+//
+// Note: typeowl.endpoint() is framework-specific (requires app instance).
+// For framework-agnostic code, use route.get() (Option 4) instead.
 
 // ─── Start Server ────────────────────────────────────────────────────────────
 
@@ -210,29 +293,35 @@ app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
   
   console.log(`
 \x1b[36m🦉 TypeOwl Example Backend\x1b[0m
-\x1b[2m──────────────────────────────\x1b[0m
+\x1b[2m──────────────────────────────────────────────────────\x1b[0m
 
   Server:     \x1b[32mhttp://localhost:${PORT}\x1b[0m
   
-  \x1b[31m🔴 No TypeOwl (raw handlers):\x1b[0m
-    GET  /api/health
-  
-  \x1b[33m🟡 Static types only (Blog exposed, endpoint not mapped):\x1b[0m
-    GET  /api/blogs
-    GET  /api/blogs/:id
-  
-  \x1b[32m🟢 typeowl.endpoint() (full type + validation):\x1b[0m
+  \x1b[34m🔵 route.get() - Framework-agnostic + Zod (⭐ Recommended):\x1b[0m
+    GET    /api/blogs
+    GET    /api/blogs/:id
+    POST   /api/blogs        \x1b[33m← Try invalid body!\x1b[0m
     GET    /api/products
     GET    /api/products/:id
     GET    /api/users
     GET    /api/users/:id
-    POST   /api/users      \x1b[33m← Try invalid body!\x1b[0m
+    POST   /api/users        \x1b[33m← Try invalid body!\x1b[0m
     DELETE /api/users/:id
+  
+  \x1b[33m🟡 Static types (types extracted from src/types/):\x1b[0m
+    Blog, BlogInput, Product types exposed
+  
+  \x1b[32m🟢 typeowl.endpoint() (see commented examples in code):\x1b[0m
+    Framework-specific alternative
+  
+  \x1b[31m🔴 Raw handler (no TypeOwl):\x1b[0m
+    GET    /api/health
   
   TypeOwl Endpoints:
     \x1b[33mhttp://localhost:${PORT}/__typeowl\x1b[0m
     \x1b[33mhttp://localhost:${PORT}/__typeowl/types/content.d.ts\x1b[0m
-    \x1b[33mhttp://localhost:${PORT}/__typeowl/types/endpoints.d.ts\x1b[0m
+
+  \x1b[36mWorks with: Fastify, Express, Hono, Next.js, Koa\x1b[0m
 
   \x1b[2mPress Ctrl+C to stop\x1b[0m
 `);

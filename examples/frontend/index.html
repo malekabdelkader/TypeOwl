@@ -530,6 +530,12 @@
         margin-left: auto;
         margin-right: auto;
       }
+      .comparison-section > div[style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+      }
+      .comparison-section > div[style*="grid-template-columns: repeat(3"] {
+        grid-template-columns: 1fr !important;
+      }
     }
 
     .comparison-card {
@@ -816,35 +822,35 @@
     </div>
 
     <div class="code-preview code-preview-split">
-      <!-- Backend Code -->
+      <!-- Backend Code - route.get (RECOMMENDED) -->
       <div class="code-block">
         <div class="code-header">
           <span class="code-dot red"></span>
           <span class="code-dot yellow"></span>
           <span class="code-dot green"></span>
-          <span class="code-title">backend/server.ts</span>
+          <span class="code-title">backend/server.ts — route.get() <i class="fa-solid fa-star" style="color: var(--accent);"></i> Recommended</span>
         </div>
         <div class="code-content">
 <span class="keyword">import</span> { z } <span class="keyword">from</span> <span class="string">'zod'</span>;
-<span class="keyword">import</span> { <span class="function">initTypeOwl</span> } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
+<span class="keyword">import</span> { <span class="function">route</span> } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
 
-<span class="keyword">const</span> typeowl = <span class="keyword">await</span> <span class="function">initTypeOwl</span>();
+<span class="comment">// Define routes (framework-agnostic!)</span>
+<span class="keyword">const</span> getUsers = route.<span class="function">get</span>(<span class="string">'/api/users'</span>)
+  .<span class="function">returns</span>(z.<span class="function">array</span>(<span class="type">UserSchema</span>));
 
-<span class="comment">// GET /api/users → returns User[]</span>
-typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</span>, <span class="string">'/api/users'</span>, {
-  response: <span class="string">'User[]'</span>,
-}, <span class="keyword">async</span> () => users);
+<span class="keyword">const</span> createUser = route.<span class="function">post</span>(<span class="string">'/api/users'</span>)
+  .<span class="function">withBody</span>(<span class="type">CreateUserSchema</span>)
+  .<span class="function">returns</span>(<span class="type">UserSchema</span>);
 
-<span class="comment">// POST /api/users → validates body with Zod</span>
-<span class="keyword">const</span> <span class="type">CreateUserSchema</span> = z.<span class="function">object</span>({
-  email: z.<span class="function">string</span>().<span class="function">email</span>(),
-  name: z.<span class="function">string</span>(),
+<span class="comment">// Wire up with your framework</span>
+app.<span class="function">get</span>(getUsers.path, <span class="keyword">async</span> () => {
+  <span class="keyword">return</span> getUsers.<span class="function">response</span>(users);
 });
 
-typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'</span>, <span class="string">'/api/users'</span>, {
-  body: <span class="type">CreateUserSchema</span>,
-  response: <span class="string">'User'</span>,
-}, <span class="keyword">async</span> ({ body }) => <span class="function">createUser</span>(body));
+app.<span class="function">post</span>(createUser.path, <span class="keyword">async</span> (req) => {
+  <span class="keyword">const</span> input = createUser.<span class="function">body</span>(req.body); <span class="comment">// Validates!</span>
+  <span class="keyword">return</span> createUser.<span class="function">response</span>(<span class="function">createUser</span>(input));
+});
         </div>
       </div>
 
@@ -873,6 +879,46 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'<
   })
 }).<span class="function">then</span>(r => r.<span class="function">json</span>());
         </div>
+      </div>
+    </div>
+
+    <!-- Static-only Note -->
+    <div style="max-width: 800px; margin: 2rem auto 0; text-align: center; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+      <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0;">
+        <i class="fa-solid fa-info-circle" style="color: var(--accent); margin-right: 0.5rem;"></i>
+        <strong>Endpoints are optional.</strong> Just need to share types without API contracts? 
+        Use <a href="/docs/index.html#static-only" style="color: var(--accent);">static extraction</a> — 
+        no Zod, no route definitions, just auto-import from backend to frontend.
+      </p>
+    </div>
+  </section>
+
+  <!-- Compatible With Section -->
+  <section class="features" style="padding-top: 2rem;">
+    <div class="section-title">
+      <h2>Works With Popular Frameworks</h2>
+    </div>
+
+    <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+      <div class="feature-card" style="padding: 1.5rem; text-align: center;">
+        <div class="feature-icon" style="margin: 0 auto 0.75rem;"><i class="fa-solid fa-bolt"></i></div>
+        <h3 style="font-size: 1rem;">Fastify</h3>
+      </div>
+      <div class="feature-card" style="padding: 1.5rem; text-align: center;">
+        <div class="feature-icon" style="margin: 0 auto 0.75rem;"><i class="fa-solid fa-server"></i></div>
+        <h3 style="font-size: 1rem;">Express</h3>
+      </div>
+      <div class="feature-card" style="padding: 1.5rem; text-align: center;">
+        <div class="feature-icon" style="margin: 0 auto 0.75rem;"><i class="fa-solid fa-fire"></i></div>
+        <h3 style="font-size: 1rem;">Hono</h3>
+      </div>
+      <div class="feature-card" style="padding: 1.5rem; text-align: center;">
+        <div class="feature-icon" style="margin: 0 auto 0.75rem;"><i class="fa-solid fa-code"></i></div>
+        <h3 style="font-size: 1rem;">Next.js</h3>
+      </div>
+      <div class="feature-card" style="padding: 1.5rem; text-align: center;">
+        <div class="feature-icon" style="margin: 0 auto 0.75rem;"><i class="fa-solid fa-cube"></i></div>
+        <h3 style="font-size: 1rem;">Koa</h3>
       </div>
     </div>
   </section>
@@ -917,66 +963,8 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'<
 
       <div class="feature-card">
         <div class="feature-icon"><i class="fa-solid fa-shield-halved"></i></div>
-        <h3>Optional Zod Validation</h3>
-        <p>Use <code>typeowl.endpoint()</code> for runtime validation, or extract types directly from .ts files.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- How It Works -->
-  <section class="how-it-works">
-    <div class="section-title">
-      <h2>How It Works</h2>
-      <p>Simple architecture, powerful results</p>
-    </div>
-
-    <div class="arch-diagram">
-      <!-- Backend Box -->
-      <div class="arch-box backend">
-        <span class="arch-box-title">Backend (deployed)</span>
-        <div class="arch-item">
-          <code>/api/users</code>
-          <span class="desc">← Your actual API</span>
-        </div>
-        <div class="arch-item">
-          <code>/__typeowl</code>
-          <span class="desc">← Lightweight manifest (JSON)</span>
-        </div>
-        <div class="arch-item">
-          <code>/__typeowl/types/*.d.ts</code>
-          <span class="desc">← TypeScript definitions</span>
-        </div>
-      </div>
-
-      <!-- Connector -->
-      <div class="arch-connector">
-        <div class="line"></div>
-        <span class="label">HTTP (dev, CI/CD, or on-demand)</span>
-        <div class="line"></div>
-        <span class="arrow">↓</span>
-      </div>
-
-      <!-- Frontend Box -->
-      <div class="arch-box frontend">
-        <span class="arch-box-title">Frontend (any environment)</span>
-        <div class="arch-item">
-          <code>1.</code>
-          <span>typeowl sync</span>
-          <span class="desc">← Fetches manifest, compares hashes</span>
-        </div>
-        <div class="arch-item">
-          <code>2.</code>
-          <span>Downloads changed type files only (incremental!)</span>
-        </div>
-        <div class="arch-item">
-          <code>3.</code>
-          <span>Commit types → independent deploys!</span>
-        </div>
-        <div class="arch-item">
-          <code>4.</code>
-          <code>import type { User } from 'typeowl/types'</code>
-          <span class="desc">← Full autocomplete!</span>
-        </div>
+        <h3>Zod-Powered Validation</h3>
+        <p>Use <code>route.get()</code> or <code>typeowl.endpoint()</code> with Zod schemas for runtime validation and type inference.</p>
       </div>
     </div>
   </section>
@@ -984,69 +972,97 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'<
   <!-- Comparison Section -->
   <section class="comparison-section">
     <div class="section-title">
-      <h2>How Does It Compare?</h2>
-      <p>Different tools for different architectural needs</p>
+      <h2>The Key Difference</h2>
+      <p>How do types get from backend to frontend?</p>
     </div>
 
-    <div class="comparison-grid">
-      <!-- TypeOwl Card -->
-      <div class="comparison-card typeowl-card">
-        <div class="card-header">
-          <img src="/typeOwl.logo.png" alt="TypeOwl" class="tool-logo">
-          <h3>TypeOwl</h3>
-          <span class="card-tag">Decoupled</span>
+    <!-- Visual Architecture Comparison -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 900px; margin: 0 auto 3rem;">
+      
+      <!-- TypeOwl Way -->
+      <div style="background: linear-gradient(180deg, rgba(245, 158, 11, 0.08) 0%, var(--bg-card) 100%); border: 2px solid var(--accent); border-radius: var(--radius); padding: 1.5rem;">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <img src="/typeOwl.logo.png" alt="TypeOwl" style="width: 40px; height: 40px; margin-bottom: 0.5rem;">
+          <h3 style="color: var(--accent); margin: 0;">TypeOwl</h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Types over HTTP</span>
         </div>
-        <ul class="card-features">
-          <li><i class="fa-solid fa-check"></i> Separate repositories</li>
-          <li><i class="fa-solid fa-check"></i> No shared code needed</li>
-          <li><i class="fa-solid fa-check"></i> Independent deploys</li>
-          <li><i class="fa-solid fa-check"></i> Existing REST APIs</li>
-          <li><i class="fa-solid fa-check"></i> On-demand sync</li>
-          <li><i class="fa-solid fa-check"></i> Optional validation</li>
+        
+        <div style="font-family: var(--font-mono); font-size: 0.75rem; background: var(--bg-tertiary); border-radius: 8px; padding: 1rem; text-align: center;">
+          <div style="background: var(--accent-glow); border: 1px solid var(--accent); border-radius: 6px; padding: 0.5rem; margin-bottom: 0.5rem;">
+            <i class="fa-solid fa-server" style="color: var(--accent);"></i> Backend Repo
+          </div>
+          <div style="color: var(--accent); font-size: 1.2rem;">↓</div>
+          <div style="color: var(--text-muted); font-size: 0.7rem; margin: 0.25rem 0;">HTTP sync</div>
+          <div style="color: var(--accent); font-size: 1.2rem;">↓</div>
+          <div style="background: rgba(59, 130, 246, 0.15); border: 1px solid #3b82f6; border-radius: 6px; padding: 0.5rem;">
+            <i class="fa-solid fa-laptop-code" style="color: #3b82f6;"></i> Frontend Repo
+          </div>
+        </div>
+        
+        <ul style="list-style: none; padding: 0; margin: 1rem 0 0; font-size: 0.85rem;">
+          <li style="padding: 0.3rem 0; color: var(--success);"><i class="fa-solid fa-check" style="margin-right: 0.5rem;"></i> Separate repos</li>
+          <li style="padding: 0.3rem 0; color: var(--success);"><i class="fa-solid fa-check" style="margin-right: 0.5rem;"></i> No shared code</li>
+          <li style="padding: 0.3rem 0; color: var(--success);"><i class="fa-solid fa-check" style="margin-right: 0.5rem;"></i> Point to production</li>
+          <li style="padding: 0.3rem 0; color: var(--success);"><i class="fa-solid fa-check" style="margin-right: 0.5rem;"></i> Independent deploys</li>
         </ul>
-        <p class="card-ideal">Ideal for separate teams & repos</p>
       </div>
 
-      <!-- tRPC Card -->
-      <div class="comparison-card">
-        <div class="card-header">
-          <div class="tool-icon"><i class="fa-solid fa-bolt"></i></div>
-          <h3>tRPC</h3>
-          <span class="card-tag alt">Integrated</span>
+      <!-- Other Libraries Way -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem;">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <div style="width: 40px; height: 40px; background: var(--bg-tertiary); border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.5rem;">
+            <i class="fa-solid fa-link" style="color: var(--text-muted);"></i>
+          </div>
+          <h3 style="color: var(--text-secondary); margin: 0;">tRPC / ts-rest</h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Shared code</span>
         </div>
-        <ul class="card-features">
-          <li><i class="fa-solid fa-check"></i> End-to-end type safety</li>
-          <li><i class="fa-solid fa-check"></i> Built-in validation</li>
-          <li><i class="fa-solid fa-check"></i> Excellent DX</li>
-          <li class="muted"><i class="fa-solid fa-minus"></i> Requires monorepo</li>
-          <li class="muted"><i class="fa-solid fa-minus"></i> Coupled deploys</li>
-          <li class="muted"><i class="fa-solid fa-minus"></i> Custom protocol</li>
-        </ul>
-        <p class="card-ideal">Ideal for full-stack monorepos</p>
-      </div>
-
-      <!-- ts-rest Card -->
-      <div class="comparison-card">
-        <div class="card-header">
-          <div class="tool-icon"><i class="fa-solid fa-file-contract"></i></div>
-          <h3>ts-rest</h3>
-          <span class="card-tag alt">Contract</span>
+        
+        <div style="font-family: var(--font-mono); font-size: 0.75rem; background: var(--bg-tertiary); border-radius: 8px; padding: 1rem; text-align: center;">
+          <div style="display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 0.5rem;">
+            <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; flex: 1;">
+              <i class="fa-solid fa-server" style="color: var(--text-muted);"></i> Backend
+            </div>
+            <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; flex: 1;">
+              <i class="fa-solid fa-laptop-code" style="color: var(--text-muted);"></i> Frontend
+            </div>
+          </div>
+          <div style="color: var(--text-muted); font-size: 1rem;">↑ ↑</div>
+          <div style="background: var(--bg-secondary); border: 1px dashed var(--border); border-radius: 6px; padding: 0.5rem; color: var(--text-muted);">
+            <i class="fa-solid fa-cube"></i> Shared Package
+          </div>
         </div>
-        <ul class="card-features">
-          <li><i class="fa-solid fa-check"></i> REST compatible</li>
-          <li><i class="fa-solid fa-check"></i> Type-safe contracts</li>
-          <li><i class="fa-solid fa-check"></i> Built-in validation</li>
-          <li class="muted"><i class="fa-solid fa-minus"></i> Shared npm package</li>
-          <li class="muted"><i class="fa-solid fa-minus"></i> Coupled releases</li>
-          <li class="muted"><i class="fa-solid fa-minus"></i> Contract syncing</li>
+        
+        <ul style="list-style: none; padding: 0; margin: 1rem 0 0; font-size: 0.85rem;">
+          <li style="padding: 0.3rem 0; color: var(--text-muted);"><i class="fa-solid fa-minus" style="margin-right: 0.5rem;"></i> Monorepo or npm package</li>
+          <li style="padding: 0.3rem 0; color: var(--text-muted);"><i class="fa-solid fa-minus" style="margin-right: 0.5rem;"></i> Shared code required</li>
+          <li style="padding: 0.3rem 0; color: var(--text-muted);"><i class="fa-solid fa-minus" style="margin-right: 0.5rem;"></i> Need backend repo access</li>
+          <li style="padding: 0.3rem 0; color: var(--text-muted);"><i class="fa-solid fa-minus" style="margin-right: 0.5rem;"></i> Coupled releases</li>
         </ul>
-        <p class="card-ideal">Ideal for shared contract workflows</p>
       </div>
     </div>
 
-    <p class="comparison-note">
+    <!-- Use Cases -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; max-width: 900px; margin: 0 auto;">
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; text-align: center;">
+        <div style="width: 48px; height: 48px; background: var(--accent-glow); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.75rem;"><i class="fa-solid fa-code-branch" style="font-size: 1.25rem; color: var(--accent);"></i></div>
+        <h4 style="font-size: 0.9rem; margin: 0 0 0.5rem; color: var(--accent);">Use TypeOwl when...</h4>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0;">Backend and frontend are separate repos or teams</p>
+      </div>
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; text-align: center;">
+        <div style="width: 48px; height: 48px; background: var(--accent-glow); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.75rem;"><i class="fa-solid fa-user-lock" style="font-size: 1.25rem; color: var(--accent);"></i></div>
+        <h4 style="font-size: 0.9rem; margin: 0 0 0.5rem; color: var(--accent);">Use TypeOwl when...</h4>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0;">Frontend devs don't have backend code access</p>
+      </div>
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; text-align: center;">
+        <div style="width: 48px; height: 48px; background: var(--accent-glow); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.75rem;"><i class="fa-solid fa-rocket" style="font-size: 1.25rem; color: var(--accent);"></i></div>
+        <h4 style="font-size: 0.9rem; margin: 0 0 0.5rem; color: var(--accent);">Use TypeOwl when...</h4>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0;">You want independent, decoupled deploys</p>
+      </div>
+    </div>
+
+    <p class="comparison-note" style="margin-top: 2rem;">
       <i class="fa-solid fa-circle-info"></i>
-      All three provide excellent type safety. TypeOwl shines in flexibility and when teams and repos are separate.
+      tRPC and ts-rest are great for monorepos. TypeOwl is for when you <strong>can't</strong> or <strong>don't want</strong> to share code.
     </p>
   </section>
 

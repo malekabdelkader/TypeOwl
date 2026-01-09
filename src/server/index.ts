@@ -46,8 +46,19 @@ export {
   type ExtractedTypes
 } from './extract.js';
 
+// Re-export route builder (Zod-based, framework-agnostic)
+export { 
+  route,
+  getRegisteredRoutes,
+  clearRouteRegistry,
+  type RouteDefinition,
+  type RouteBuilder,
+  type HttpMethod as RouteHttpMethod
+} from '../route.js';
+
 // Import for internal use
 import { extractTypes as extractTypesSync } from './extract.js';
+import { getRegisteredRoutes } from '../route.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🔧 OPTIONAL ZOD SUPPORT
