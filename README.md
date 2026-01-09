@@ -27,7 +27,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
-  <a href="#three-ways-to-define-types">Type Definition Options</a> •
+  <a href="#four-ways-to-define-types">Type Definition Options</a> •
   <a href="#features">Features</a> •
   <a href="#examples">Examples</a>
 </p>
@@ -45,7 +45,7 @@ TypeOwl solves the **multi-repo type sharing problem**. When your backend and fr
 | **Independent Deploys** | Deploy frontend and backend separately. Commit types with your code = guaranteed compatibility at deploy time. |
 | **On-Demand Sync** | You control when types update: at build time, in CI/CD, or manually. No forced updates. |
 | **Loose Coupling** | Backend changes don't break frontend builds. Frontend pulls types when ready. |
-| **Works with Any REST API** | Not a framework — just a type synchronization layer on top of your existing API. |
+| **Works with Popular Frameworks** | `route.get()` designed for Fastify, Express, Hono, Next.js, Koa. |
 
 ## The Problem
 
@@ -71,9 +71,9 @@ interface User {
 ┌─────────────────────────────────────────────────────────────────┐
 │              BACKEND (local dev OR production)                  │
 │                                                                 │
-│   /api/users              ← Your actual API                    │
+│   src/types/              ← Your dedicated types folder         │
 │   /__typeowl              ← Lightweight manifest (JSON)        │
-│   /__typeowl/types/*.d.ts ← TypeScript definitions             │
+│   /__typeowl/types/*.d.ts ← Extracted TypeScript definitions   │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
                            HTTP sync
@@ -99,60 +99,101 @@ interface User {
 ```bash
 npm install typeowl
 
-# Optional: Install Zod for runtime validation (typeowl.endpoint)
+# Recommended: Install Zod for route.get() and typeowl.endpoint()
 npm install zod
 ```
 
+> 💡 **Zod is highly recommended** for the `route.get()` API. Without Zod, you can still use static type extraction (Option 2).
+
 ### Backend Setup
 
-**1. Create config file:**
+TypeOwl offers **two approaches** for defining API types:
+
+| Approach | Framework | Best For |
+|----------|-----------|----------|
+| **`route.get()`** ⭐ | Fastify, Express, Hono, Next.js, Koa | Recommended |
+| **`typeowl.endpoint()`** | Specific framework (passed to function) | Quick setup with one framework |
+
+---
+
+### ⭐ Option 1: `route.get()` — Framework-Agnostic (Recommended)
+
+Define routes once, use with popular server frameworks:
 
 ```typescript
-// typeowl.server.config.ts
-import { defineServerConfig } from 'typeowl/server';
-import type { FastifyInstance } from 'fastify';
+// server.ts
+import Fastify from 'fastify';
+import { z } from 'zod';
+import { initTypeOwl, route } from 'typeowl/server';
 
-export default defineServerConfig({
-  version: '1.0.0',
-  
-  // Security: Only these paths can have types extracted
-  typeSources: './src/types/',
-  
-  // Extract types from files (creates content.d.ts)
-  extract: {
-    content: {
-      from: './src/types/',
-      types: '*',  // Extract ALL exported types, or specify: ['Blog', 'Product']
-    },
-  },
-  
-  // Dynamic mode: serve types at runtime
-  mode: 'dynamic',
-  
-  // Register TypeOwl routes (framework-specific)
-  registerRoutes: (appInstance, typeowl, config) => {
-    const app = appInstance as FastifyInstance;
-    const basePath = typeowl.getBasePath();
+// Define Zod schemas
+const UserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  name: z.string(),
+});
 
-    // Manifest endpoint
-    app.get(basePath, async (request, reply) => {
-      const response = typeowl.handleRequest(basePath);
-      if (response) return reply.type(response.contentType).send(response.body);
-      return reply.code(404).send({ error: 'Not found' });
-    });
+const CreateUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string(),
+});
 
-    // Type files endpoint
-    app.get(`${basePath}/types/:file`, async (request, reply) => {
-      const { file } = request.params as { file: string };
-      const response = typeowl.handleRequest(`${basePath}/types/${file}`);
-      if (response) return reply.type(response.contentType).send(response.body);
-      return reply.code(404).send({ error: 'Not found' });
-    });
-  },
+// ═══════════════════════════════════════════════════════════════════════════
+// 📍 DEFINE ROUTES (framework-agnostic!)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const getUsers = route.get('/api/users')
+  .returns(z.array(UserSchema));
+
+const createUser = route.post('/api/users')
+  .withBody(CreateUserSchema)
+  .returns(UserSchema);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🌐 WIRE UP WITH YOUR FRAMEWORK
+// ═══════════════════════════════════════════════════════════════════════════
+
+const app = Fastify();
+const typeowl = await initTypeOwl();
+await typeowl.mount(app);
+
+// Handlers - use route.path, route.body(), route.response()
+app.get(getUsers.path, async () => {
+  return getUsers.response(users);
+});
+
+app.post(createUser.path, async (request, reply) => {
+  try {
+    const input = createUser.body(request.body);  // Validates with Zod!
+    const newUser = { id: '1', ...input };
+    return createUser.response(newUser);
+  } catch (err) {
+    reply.code(400).send({ error: 'Invalid body' });
+  }
+});
+
+app.listen({ port: 3001 });
+```
+
+**Works with Express, Hono, Next.js, Koa:**
+
+```typescript
+// Express example
+expressApp.get(getUsers.path, (req, res) => {
+  res.json(getUsers.response(users));
+});
+
+// Hono example
+honoApp.get(getUsers.path, (c) => {
+  return c.json(getUsers.response(users));
 });
 ```
 
-**2. Use in your server:**
+---
+
+### Option 2: `typeowl.endpoint()` — Framework-Specific
+
+Pass the app instance directly (simpler for single-framework projects):
 
 ```typescript
 // server.ts
@@ -160,20 +201,14 @@ import Fastify from 'fastify';
 import { z } from 'zod';
 import { initTypeOwl } from 'typeowl/server';
 
-// Auto-loads config from typeowl.server.config.ts
 const typeowl = await initTypeOwl();
-
 const app = Fastify();
-
-// Mount TypeOwl routes (uses registerRoutes from config)
 await typeowl.mount(app);
 
-// Define schemas
 const UserSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   name: z.string(),
-  role: z.enum(['admin', 'user', 'guest']),
 });
 
 // 🟢 typeowl.endpoint() - Full type generation + validation
@@ -195,6 +230,49 @@ typeowl.endpoint(app, 'GET', '/api/products', {
 }, async () => products);
 
 app.listen({ port: 3001 });
+```
+
+---
+
+### Config File (Both Approaches)
+
+```typescript
+// typeowl.server.config.ts
+import { defineServerConfig } from 'typeowl/server';
+import type { FastifyInstance } from 'fastify';
+
+export default defineServerConfig({
+  version: '1.0.0',
+  typeSources: './src/types/',
+  
+  // Extract types from files
+  extract: {
+    content: {
+      from: './src/types/',
+      types: '*',
+    },
+  },
+  
+  mode: 'dynamic',
+  
+  registerRoutes: (appInstance, typeowl, config) => {
+    const app = appInstance as FastifyInstance;
+    const basePath = typeowl.getBasePath();
+
+    app.get(basePath, async (request, reply) => {
+      const response = typeowl.handleRequest(basePath);
+      if (response) return reply.type(response.contentType).send(response.body);
+      return reply.code(404).send({ error: 'Not found' });
+    });
+
+    app.get(`${basePath}/types/:file`, async (request, reply) => {
+      const { file } = request.params as { file: string };
+      const response = typeowl.handleRequest(`${basePath}/types/${file}`);
+      if (response) return reply.type(response.contentType).send(response.body);
+      return reply.code(404).send({ error: 'Not found' });
+    });
+  },
+});
 ```
 
 ### Frontend Setup
@@ -270,9 +348,25 @@ const users: User[] = await fetch('/api/users').then(r => r.json());
 
 > 💡 **Tip**: TypeOwl ships with a placeholder at `typeowl/types`. After running `npx typeowl sync` and configuring your tsconfig paths, the placeholder gets overridden with your actual generated types.
 
-## Three Ways to Define Types
+## Supported Frameworks
 
-TypeOwl supports three approaches, from zero-config to full validation:
+`route.get()` works with popular server frameworks:
+
+| Framework | Status |
+|-----------|--------|
+| **Fastify** | ✅ Supported |
+| **Express** | ✅ Supported |
+| **Hono** | ✅ Supported |
+| **Next.js API Routes** | ✅ Supported |
+| **Koa** | ✅ Supported |
+
+> 💡 **Note**: `route.get()` defines routes separately from your framework. You wire up handlers using your framework's API. `typeowl.endpoint()` is an alternative that integrates directly with Fastify.
+
+## Four Ways to Define Types
+
+TypeOwl supports four approaches, from zero-config to full validation.
+
+> 💡 **Endpoints are optional!** `route.get()` and `typeowl.endpoint()` are recommended for API contracts + validation, but you can use **static extraction only** (Option 2) if you just want to share types without copy/paste.
 
 ### 🔴 Option 1: No TypeOwl (Raw Handlers)
 
@@ -288,8 +382,12 @@ const health = await fetch('/api/health').then(r => r.json()) as HealthResponse;
 
 ### 🟡 Option 2: Static Types (Extract from Files)
 
+Just need to share types without API contracts? Use static extraction — no Zod, no route definitions.
+
+> 💡 **Tip**: Create a dedicated `src/types/` folder for types you want to share with the frontend.
+
 ```typescript
-// src/types/Blog.ts
+// src/types/Blog.ts — your dedicated types folder
 export type Blog = {
   id: string;
   title: string;
@@ -304,12 +402,39 @@ extract: {
   },
 }
 
-// Frontend: Force-cast with exposed type
+// Frontend: Auto-import types — no copy/paste!
 import type { Blog } from 'typeowl/types';
 const blogs = await fetch('/api/blogs').then(r => r.json()) as Blog[];
 ```
 
-### 🟢 Option 3: typeowl.endpoint() (Full Type Safety + Validation)
+> ⚠️ **No API contract**: Static extraction shares types but doesn't guarantee your API returns those types. For full type safety, use Option 3 or 4.
+
+### 🔵 Option 3: route.get() — Framework-Agnostic (⭐ Recommended)
+
+```typescript
+import { route } from 'typeowl/server';
+import { z } from 'zod';
+
+// Define routes ONCE (framework-agnostic!)
+const getUsers = route.get('/api/users')
+  .returns(z.array(UserSchema));
+
+const createUser = route.post('/api/users')
+  .withBody(CreateUserSchema)
+  .returns(UserSchema);
+
+// Use with your framework of choice
+app.get(getUsers.path, async () => {
+  return getUsers.response(users);
+});
+
+app.post(createUser.path, async (request) => {
+  const input = createUser.body(request.body);  // Validates with Zod!
+  return createUser.response(newUser);
+});
+```
+
+### 🟢 Option 4: typeowl.endpoint() — Framework-Specific
 
 ```typescript
 // Backend: Auto-validates AND registers types
@@ -443,27 +568,30 @@ export default defineConfig({
 
 ## Features
 
+- 🌐 **Multi-framework** — `route.get()` works with a wide set of frameworks
+- ✅ **Zod validation** — Runtime validation with type inference via Zod schemas
 - 🔄 **Incremental sync** — Only fetches files that changed (via hash comparison)
 - 📦 **Domain-based organization** — Separate types by domain (users, posts, content)
 - 🗺️ **Endpoint mapping** — Full type safety for API calls via `ApiEndpoints`
-- ✅ **Runtime validation** — `typeowl.endpoint()` validates with Zod (optional)
-- 📁 **Static type extraction** — Extract types directly from `.ts` files (no Zod needed!)
-- 🔀 **Mixed mode** — Use Zod for body validation, type references for responses
+- 📁 **Static type extraction** — Extract types directly from `.ts` files (alternative to Zod)
 - 💾 **Offline cache** — Works when backend is down
 - 👀 **Watch mode** — Auto-refresh on changes
 - 🔒 **Guard config** — Protect TypeOwl endpoints with API keys
 - 🚀 **Independent deploys** — Commit types to guarantee compatibility
 
-### Zod is Optional
+### Zod Requirements
 
 | Feature | Requires Zod? |
 |---------|---------------|
+| **`route.get()` ⭐ (Recommended)** | ✅ Yes (install separately) |
+| `typeowl.endpoint()` with Zod schemas | ✅ Yes (install separately) |
+| `registerZod()` | ✅ Yes (install separately) |
 | Static type extraction (`extract` config) | ❌ No |
 | `typeowl.endpoint()` with type references | ❌ No |
 | `registerType()`, `registerObject()` | ❌ No |
 | Client-side type sync | ❌ No |
-| `registerZod()` | ✅ Yes |
-| `typeowl.endpoint()` with Zod schemas (validation) | ✅ Yes |
+
+> 💡 **Zod is a peer dependency** — install it with `npm install zod`. The recommended `route.get()` approach requires Zod. For Zod-free usage, use static type extraction (Option 2).
 
 ## Server Configuration
 
@@ -566,7 +694,7 @@ npm install
 npm run dev
 ```
 
-- **Backend**: Fastify server with all three type definition approaches
+- **Backend**: Fastify server with all four type definition approaches
 - **Frontend**: React + Vite app with typed API client
 
 ## Comparison
@@ -575,11 +703,11 @@ npm run dev
 |---------|---------|------|---------|-----------------|
 | **Works across repos** | ✅ | ❌ monorepo only | ❌ shared package | ✅ |
 | **No shared code/package** | ✅ | ❌ | ❌ | ✅ |
+| **Multi-framework** | ✅ wide set | ❌ | ✅ | ❌ |
 | **Independent deploys** | ✅ | ❌ | ❌ | ✅ |
 | **Pure frontend dev** | ✅ point to prod | ❌ | ❌ | ✅ |
 | **REST APIs** | ✅ | ❌ | ✅ | ❌ |
-| **No build step** | ✅ | ✅ | ✅ | ❌ |
-| **Runtime validation** | ✅ optional | ✅ | ✅ | ❌ |
+| **Runtime validation** | ✅ with Zod | ✅ | ✅ | ❌ |
 | **Incremental sync** | ✅ | N/A | N/A | ❌ |
 | **Static type extraction** | ✅ | ❌ | ❌ | ❌ |
 | **Offline cache** | ✅ | N/A | N/A | ❌ |
