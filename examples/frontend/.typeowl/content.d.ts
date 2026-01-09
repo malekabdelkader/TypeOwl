@@ -2,7 +2,7 @@
  * 🦉 TypeOwl Generated Types
  * Domain: content
  * Version: 1.0.0
- * Generated: 2026-01-07T13:54:50.617Z
+ * Generated: 2026-01-09T17:21:02.401Z
  * DO NOT EDIT - This file is auto-generated
  */
 

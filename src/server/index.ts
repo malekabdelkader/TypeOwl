@@ -611,6 +611,82 @@ export class TypeRegistry {
     return methodPart + parts.join('');
   }
 
+  /**
+   * Register endpoint types from route.get()/post()/etc. builder.
+   * Call this after defining routes with the route builder API.
+   * 
+   * @example
+   * import { route } from 'typeowl/server';
+   * 
+   * const getUsers = route.get('/api/users').returns(z.array(UserSchema));
+   * const getUser = route.get('/api/users/:id').withParams(IdSchema).returns(UserSchema);
+   * 
+   * // In your server setup:
+   * const typeowl = await initTypeOwl();
+   * typeowl.registerRoutesFromBuilder();  // Generates types from route definitions
+   */
+  registerRoutesFromBuilder(domain: string = 'endpoints'): this {
+    const routes = getRegisteredRoutes();
+    
+    if (routes.length === 0) {
+      return this;
+    }
+    
+    // Helper to check if value is a Zod schema
+    const isZodSchema = (val: unknown): val is z.ZodType => {
+      return val !== null && typeof val === 'object' && '_def' in val && 'safeParse' in val;
+    };
+    
+    // Check if we need Zod
+    const hasZodSchemas = routes.some(r => 
+      isZodSchema(r.schemas.params) || isZodSchema(r.schemas.body) || 
+      isZodSchema(r.schemas.query) || isZodSchema(r.schemas.response)
+    );
+    if (hasZodSchemas) {
+      getZod();
+    }
+    
+    this.domain(domain);
+    
+    for (const route of routes) {
+      const endpointName = this.generateEndpointTypeName(route.method as HttpMethod, route.path);
+      
+      let paramsTypeName: string | undefined;
+      if (isZodSchema(route.schemas.params)) {
+        paramsTypeName = `${endpointName}Params`;
+        this.registerZod(paramsTypeName, route.schemas.params);
+      }
+      
+      let bodyTypeName: string | undefined;
+      if (isZodSchema(route.schemas.body)) {
+        bodyTypeName = `${endpointName}Body`;
+        this.registerZod(bodyTypeName, route.schemas.body);
+      }
+      
+      let queryTypeName: string | undefined;
+      if (isZodSchema(route.schemas.query)) {
+        queryTypeName = `${endpointName}Query`;
+        this.registerZod(queryTypeName, route.schemas.query);
+      }
+      
+      let responseTypeName: string = 'unknown';
+      if (isZodSchema(route.schemas.response)) {
+        responseTypeName = `${endpointName}Response`;
+        this.registerZod(responseTypeName, route.schemas.response);
+      }
+      
+      // Register endpoint definition
+      this.registerEndpoint(route.method as HttpMethod, route.path, {
+        params: paramsTypeName,
+        body: bodyTypeName,
+        query: queryTypeName,
+        response: responseTypeName,
+      });
+    }
+    
+    return this;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Type File Generation
   // ─────────────────────────────────────────────────────────────────────────
@@ -1250,6 +1326,10 @@ export function createTypeOwlFromConfig(config: TypeOwlServerPluginConfig): Type
         .extractAndRegister(extraction.from, extraction.types);
     }
   }
+  
+  // Auto-register routes from route.get()/post()/etc. builder
+  // This generates endpoint types from Zod schemas defined with the route builder API
+  registry.registerRoutesFromBuilder();
   
   return registry;
 }
