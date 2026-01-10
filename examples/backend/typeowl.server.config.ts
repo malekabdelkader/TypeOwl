@@ -80,6 +80,14 @@ export default defineServerConfig({
     },
   },
 
+  /**
+   * Source files containing route definitions.
+   * TypeOwl extracts endpoint types from route.get().returns<T>() patterns.
+   */
+  routes: './src/server.ts',
+
+  // onConflict: 'rename',  // Uncomment to auto-rename conflicting types
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 🛡️ GUARD
   // ═══════════════════════════════════════════════════════════════════════════

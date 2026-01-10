@@ -1,57 +1,43 @@
 /**
- * 🦉 TypeOwl Type Extraction
+ * 🦉 TypeOwl Type Extraction (TypeChecker-based)
  * 
- * Extracts TypeScript types and interfaces directly from source files.
- * Automatically follows and includes dependent/nested types.
- * This enables zero-duplication type sharing.
+ * Uses TypeScript's TypeChecker API to extract types from source files.
+ * Types are extracted as raw TypeScript strings - no intermediate format.
  */
 
-import { Project, SourceFile, TypeAliasDeclaration, InterfaceDeclaration, EnumDeclaration, Node, SyntaxKind, Type } from 'ts-morph';
+import ts from 'typescript';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { statSync, readdirSync } from 'node:fs';
-import type { TypeDefinition } from '../types.js';
+import { statSync, readdirSync, existsSync } from 'node:fs';
+import type { RawTypeDefinition } from '../types.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🔍 TYPE EXTRACTOR
+// 🔍 TYPE EXTRACTOR INTERFACES
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface ExtractedType {
   name: string;
-  definition: TypeDefinition;
   /** The raw TypeScript source for this type */
-  source: string;
+  source: RawTypeDefinition;
   /** Whether this type was explicitly requested or auto-discovered as a dependency */
   isDependency?: boolean;
 }
 
 export interface ExtractOptions {
-  /**
-   * Path to the TypeScript source file or directory
-   * Can be:
-   * - Absolute path: '/Users/.../src/types.ts'
-   * - Relative path: './types.ts' (relative to cwd)
-   * - import.meta.url: Pass the current file's URL
-   */
   file: string;
-  
-  /**
-   * Names of types/interfaces to extract
-   * If not provided, extracts ALL exported types and interfaces
-   */
   types?: string[];
-  
-  /**
-   * Path to tsconfig.json (optional)
-   * If not provided, uses default TypeScript settings
-   */
   tsconfig?: string;
-  
-  /**
-   * Whether to automatically include dependent types
-   * @default true
-   */
   includeDependencies?: boolean;
+}
+
+export interface RouteTypeInfo {
+  method: string;
+  path: string;
+  params?: string;
+  body?: string;
+  query?: string;
+  response: string;
+  types: Map<string, ExtractedType>;
 }
 
 // Built-in types that should not be extracted
@@ -64,502 +50,388 @@ const BUILTIN_TYPES = new Set([
   'ThisType', 'Uppercase', 'Lowercase', 'Capitalize', 'Uncapitalize',
 ]);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🏗️ TYPESCRIPT PROGRAM CREATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+function createProgram(files: string[], tsconfig?: string): ts.Program {
+  let compilerOptions: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    strict: true,
+    esModuleInterop: true,
+    skipLibCheck: true,
+    declaration: true,
+  };
+
+  if (tsconfig && existsSync(tsconfig)) {
+    const configFile = ts.readConfigFile(tsconfig, ts.sys.readFile);
+    if (!configFile.error) {
+      const parsed = ts.parseJsonConfigFileContent(
+        configFile.config,
+        ts.sys,
+        dirname(tsconfig)
+      );
+      compilerOptions = { ...compilerOptions, ...parsed.options };
+    }
+  }
+
+  return ts.createProgram(files, compilerOptions);
+}
+
+function getFilesRecursively(dirPath: string): string[] {
+  const files: string[] = [];
+  const entries = readdirSync(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        files.push(...getFilesRecursively(fullPath));
+      }
+    } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📦 STATIC TYPE EXTRACTION
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
- * Extract types and interfaces from a TypeScript source file
- * Automatically follows and includes dependent types.
- * 
- * @example
- * // Extract specific types (will auto-include dependencies)
- * const types = extractTypes({
- *   file: './src/types.ts',
- *   types: ['Blog', 'Product']
- * });
- * 
- * @example
- * // Extract all exported types from a directory
- * const types = extractTypes({
- *   file: './src/types/'
- * });
+ * Extract types from TypeScript source files as raw .d.ts content
  */
 export function extractTypes(options: ExtractOptions): ExtractedType[] {
   const { file, types: typeNames, tsconfig, includeDependencies = true } = options;
-  
-  // Resolve the file path
+
+  // Resolve file path
   let filePath: string;
   if (file.startsWith('file://')) {
-    const currentFile = fileURLToPath(file);
-    filePath = currentFile;
+    filePath = fileURLToPath(file);
   } else if (file.startsWith('/')) {
     filePath = file;
   } else {
     filePath = resolve(process.cwd(), file);
   }
-  
-  // Create a ts-morph project with resolution enabled
-  const project = new Project({
-    tsConfigFilePath: tsconfig,
-    skipAddingFilesFromTsConfig: true,
-    compilerOptions: {
-      // Enable module resolution to follow imports
-      moduleResolution: 100, // NodeNext
-      allowSyntheticDefaultImports: true,
-      esModuleInterop: true,
-    },
-  });
-  
-  // Collect source files - handle both files and directories
-  const sourceFiles: SourceFile[] = [];
-  const baseDir = statSync(filePath).isDirectory() ? filePath : dirname(filePath);
-  
+
+  // Get list of files to process
+  let files: string[];
   try {
     const stat = statSync(filePath);
     if (stat.isDirectory()) {
-      // Scan directory for .ts files recursively
-      addFilesRecursively(filePath, project, sourceFiles);
+      files = getFilesRecursively(filePath);
     } else {
-      sourceFiles.push(project.addSourceFileAtPath(filePath));
+      files = [filePath];
     }
   } catch (e) {
     throw new Error(`[TypeOwl] Failed to read path: ${filePath}\n${e}`);
   }
-  
-  // Track extracted types to avoid duplicates
+
+  if (files.length === 0) {
+    return [];
+  }
+
+  // Create TypeScript program
+  const program = createProgram(files, tsconfig);
+  const checker = program.getTypeChecker();
+
+  // Track extracted types
   const extractedMap = new Map<string, ExtractedType>();
-  // Track types being processed to detect cycles
   const processing = new Set<string>();
-  
+
   /**
-   * Extract a single type and its dependencies
+   * Extract a type by name - get raw TypeScript source
+   * Collects ALL occurrences (even duplicates) for conflict detection later
    */
-  function extractTypeByName(
-    name: string, 
-    isDependency: boolean = false
-  ): void {
-    // Skip if already extracted or processing
-    if (extractedMap.has(name) || processing.has(name)) return;
-    // Skip built-in types
+  function extractTypeByName(name: string, isDependency: boolean = false): void {
+    if (processing.has(name)) return;
     if (BUILTIN_TYPES.has(name)) return;
-    
+
     processing.add(name);
-    
-    // Find the type declaration across all source files
-    for (const sourceFile of project.getSourceFiles()) {
-      // Check type aliases
-      const typeAlias = sourceFile.getTypeAlias(name);
-      if (typeAlias) {
-        const extracted = extractTypeAlias(typeAlias, isDependency);
-        extractedMap.set(name, extracted);
-        
-        // Extract dependencies if enabled
-        if (includeDependencies) {
-          const deps = findTypeDependencies(typeAlias);
-          for (const dep of deps) {
-            extractTypeByName(dep, true);
+
+    // Search all source files for the type
+    for (const sourceFile of program.getSourceFiles()) {
+      if (sourceFile.isDeclarationFile) continue;
+
+      ts.forEachChild(sourceFile, (node) => {
+        // Handle interface declarations
+        if (ts.isInterfaceDeclaration(node) && node.name.text === name) {
+          const source = node.getText();
+          const key = extractedMap.has(name) ? `${name}__dup__${sourceFile.fileName}` : name;
+          extractedMap.set(key, {
+            name,  // Keep original name for conflict detection
+            source,
+            isDependency,
+          });
+
+          if (includeDependencies) {
+            extractDependenciesFromNode(node);
           }
         }
-        processing.delete(name);
-        return;
-      }
-      
-      // Check interfaces
-      const iface = sourceFile.getInterface(name);
-      if (iface) {
-        const extracted = extractInterface(iface, isDependency);
-        extractedMap.set(name, extracted);
-        
-        // Extract dependencies if enabled
-        if (includeDependencies) {
-          const deps = findTypeDependencies(iface);
-          for (const dep of deps) {
-            extractTypeByName(dep, true);
+
+        // Handle type alias declarations
+        if (ts.isTypeAliasDeclaration(node) && node.name.text === name) {
+          const source = node.getText();
+          const key = extractedMap.has(name) ? `${name}__dup__${sourceFile.fileName}` : name;
+          extractedMap.set(key, {
+            name,  // Keep original name for conflict detection
+            source,
+            isDependency,
+          });
+
+          if (includeDependencies) {
+            extractDependenciesFromNode(node);
           }
         }
-        processing.delete(name);
-        return;
-      }
-      
-      // Check enums
-      const enumDecl = sourceFile.getEnum(name);
-      if (enumDecl) {
-        const extracted = extractEnum(enumDecl, isDependency);
-        extractedMap.set(name, extracted);
-        processing.delete(name);
-        return;
-      }
+
+        // Handle enum declarations
+        if (ts.isEnumDeclaration(node) && node.name.text === name) {
+          // Convert enum to union type for .d.ts
+          const members = node.members.map(m => {
+            const initializer = m.initializer ? m.initializer.getText() : `'${m.name.getText()}'`;
+            return initializer;
+          });
+          
+          extractedMap.set(name, {
+            name,
+            source: `type ${name} = ${members.join(' | ')};`,
+            isDependency,
+          });
+        }
+      });
     }
-    
-    // Type not found in loaded files - try to resolve from imports
-    for (const sourceFile of sourceFiles) {
-      const importedFile = resolveImportedType(sourceFile, name, project);
-      if (importedFile) {
-        // The file was added to project, retry extraction
-        processing.delete(name);
-        extractTypeByName(name, isDependency);
-        return;
-      }
-    }
-    
+
     processing.delete(name);
   }
-  
-  // Extract requested types
+
+  /**
+   * Extract dependencies from a node by finding type references
+   */
+  function extractDependenciesFromNode(node: ts.Node): void {
+    function visit(child: ts.Node) {
+      if (ts.isTypeReferenceNode(child)) {
+        const typeName = child.typeName;
+        if (ts.isIdentifier(typeName)) {
+          const name = typeName.text;
+          if (!BUILTIN_TYPES.has(name)) {
+            extractTypeByName(name, true);
+          }
+        }
+      }
+      ts.forEachChild(child, visit);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  // Extract requested types or all exported types
   if (typeNames && typeNames.length > 0) {
-    // Extract specific types
     for (const typeName of typeNames) {
       extractTypeByName(typeName, false);
     }
   } else {
-    // Extract all exported types from the source files
-    for (const sourceFile of sourceFiles) {
-      // Get type aliases
-      for (const typeAlias of sourceFile.getTypeAliases()) {
-        if (typeAlias.isExported()) {
-          extractTypeByName(typeAlias.getName(), false);
+    // Extract all exported types
+    for (const sourceFile of program.getSourceFiles()) {
+      if (sourceFile.isDeclarationFile) continue;
+      if (!files.includes(sourceFile.fileName)) continue;
+
+      ts.forEachChild(sourceFile, (node) => {
+        const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
+        const isExported = modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword);
+
+        if (isExported) {
+          if (ts.isInterfaceDeclaration(node)) {
+            extractTypeByName(node.name.text, false);
+          }
+          if (ts.isTypeAliasDeclaration(node)) {
+            extractTypeByName(node.name.text, false);
+          }
+          if (ts.isEnumDeclaration(node)) {
+            extractTypeByName(node.name.text, false);
+          }
         }
-      }
-      
-      // Get interfaces
-      for (const iface of sourceFile.getInterfaces()) {
-        if (iface.isExported()) {
-          extractTypeByName(iface.getName(), false);
-        }
-      }
-      
-      // Get enums
-      for (const enumDecl of sourceFile.getEnums()) {
-        if (enumDecl.isExported()) {
-          extractTypeByName(enumDecl.getName(), false);
-        }
-      }
+      });
     }
   }
-  
+
   return Array.from(extractedMap.values());
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔵 ROUTE TYPE EXTRACTION
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
- * Recursively add .ts files from a directory
+ * Extract route definitions and their types from a source file
  */
-function addFilesRecursively(
-  dirPath: string, 
-  project: Project, 
-  sourceFiles: SourceFile[]
-): void {
-  const entries = readdirSync(dirPath, { withFileTypes: true });
-  
-  for (const entry of entries) {
-    const fullPath = join(dirPath, entry.name);
-    if (entry.isDirectory()) {
-      // Skip node_modules and hidden directories
-      if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
-        addFilesRecursively(fullPath, project, sourceFiles);
+export function extractRouteTypes(sourceFile: string, tsconfig?: string): RouteTypeInfo[] {
+  const filePath = sourceFile.startsWith('/') 
+    ? sourceFile 
+    : resolve(process.cwd(), sourceFile);
+
+  const program = createProgram([filePath], tsconfig);
+  const checker = program.getTypeChecker();
+  const routes: RouteTypeInfo[] = [];
+
+  const source = program.getSourceFile(filePath);
+  if (!source) return routes;
+
+  function visit(node: ts.Node) {
+    if (ts.isCallExpression(node)) {
+      const routeInfo = parseRouteChain(node, checker);
+      if (routeInfo) {
+        routes.push(routeInfo);
       }
-    } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-      sourceFiles.push(project.addSourceFileAtPath(fullPath));
     }
+    ts.forEachChild(node, visit);
   }
+
+  visit(source);
+  return routes;
 }
 
 /**
- * Find all type names referenced within a type declaration
+ * Get the type name as defined by the developer.
+ * No expansion - keeps original names like IdParams, User, Blog.
  */
-function findTypeDependencies(
-  node: TypeAliasDeclaration | InterfaceDeclaration
-): Set<string> {
-  const dependencies = new Set<string>();
-  
-  // Find all type references in the node
-  node.forEachDescendant((descendant) => {
-    if (Node.isTypeReference(descendant)) {
-      const typeName = descendant.getTypeName();
-      if (Node.isIdentifier(typeName)) {
-        const name = typeName.getText();
-        if (!BUILTIN_TYPES.has(name)) {
-          dependencies.add(name);
-        }
-      } else if (Node.isQualifiedName(typeName)) {
-        // Handle qualified names like Namespace.Type
-        const name = typeName.getRight().getText();
-        if (!BUILTIN_TYPES.has(name)) {
-          dependencies.add(name);
-        }
-      }
-    }
-  });
-  
-  return dependencies;
+function getTypeName(type: ts.Type, checker: ts.TypeChecker): string {
+  return checker.typeToString(type, undefined, ts.TypeFormatFlags.NoTruncation);
 }
 
 /**
- * Try to resolve an imported type and add its source file to the project
+ * Extract the type definition source for a type (if it's a local type).
+ * Returns the interface/type definition string, or null if it's a built-in.
  */
-function resolveImportedType(
-  sourceFile: SourceFile, 
-  typeName: string,
-  project: Project
-): SourceFile | null {
-  // Find import that brings in this type
-  for (const importDecl of sourceFile.getImportDeclarations()) {
-    const namedImports = importDecl.getNamedImports();
-    const hasType = namedImports.some(ni => ni.getName() === typeName);
-    
-    if (hasType) {
-      // Resolve the module specifier to a file path
-      const moduleSpecifier = importDecl.getModuleSpecifierValue();
-      const sourceFilePath = sourceFile.getFilePath();
-      const sourceDir = dirname(sourceFilePath);
-      
-      // Try to resolve the import
-      let resolvedPath: string | null = null;
-      
-      if (moduleSpecifier.startsWith('.')) {
-        // Relative import
-        let targetPath = resolve(sourceDir, moduleSpecifier);
-        
-        // Try different extensions
-        const extensions = ['.ts', '.tsx', '/index.ts', '/index.tsx'];
-        for (const ext of extensions) {
-          const testPath = targetPath.replace(/\.(js|mjs)$/, '') + ext;
-          try {
-            if (statSync(testPath.replace(/\.js$/, '.ts')).isFile()) {
-              resolvedPath = testPath.replace(/\.js$/, '.ts');
-              break;
-            }
-          } catch {}
-          try {
-            if (statSync(testPath).isFile()) {
-              resolvedPath = testPath;
-              break;
-            }
-          } catch {}
-        }
-        
-        // Try without extension replacement
-        if (!resolvedPath) {
-          const noExt = targetPath.replace(/\.(js|mjs|ts|tsx)$/, '');
-          for (const ext of ['.ts', '.tsx']) {
-            try {
-              if (statSync(noExt + ext).isFile()) {
-                resolvedPath = noExt + ext;
-                break;
-              }
-            } catch {}
-          }
-        }
-      }
-      
-      if (resolvedPath) {
-        // Check if already in project
-        const existing = project.getSourceFile(resolvedPath);
-        if (existing) return existing;
-        
-        // Add to project
-        try {
-          return project.addSourceFileAtPath(resolvedPath);
-        } catch {
-          return null;
-        }
-      }
-    }
+function extractTypeDefinition(type: ts.Type, checker: ts.TypeChecker): { name: string; source: string } | null {
+  const symbol = type.getSymbol();
+  if (!symbol) return null;
+  
+  const name = symbol.getName();
+  if (BUILTIN_TYPES.has(name)) return null;
+  
+  const declarations = symbol.getDeclarations();
+  if (!declarations || declarations.length === 0) return null;
+  
+  const decl = declarations[0];
+  if (ts.isInterfaceDeclaration(decl) || ts.isTypeAliasDeclaration(decl)) {
+    return { name, source: decl.getText() };
   }
   
   return null;
 }
 
-/**
- * Extract a type alias declaration
- */
-function extractTypeAlias(
-  typeAlias: TypeAliasDeclaration, 
-  isDependency: boolean
-): ExtractedType {
-  const name = typeAlias.getName();
-  const typeParams = typeAlias.getTypeParameters();
-  const typeNode = typeAlias.getTypeNode();
+function parseRouteChain(node: ts.CallExpression, checker: ts.TypeChecker): RouteTypeInfo | null {
+  if (!ts.isPropertyAccessExpression(node.expression)) return null;
   
-  // Build the generic parameters text
-  let genericText = '';
-  if (typeParams.length > 0) {
-    const params = typeParams.map(p => {
-      const constraint = p.getConstraint();
-      const defaultType = p.getDefault();
-      let paramText = p.getName();
-      if (constraint) paramText += ` extends ${constraint.getText()}`;
-      if (defaultType) paramText += ` = ${defaultType.getText()}`;
-      return paramText;
-    }).join(', ');
-    genericText = `<${params}>`;
-  }
-  
-  const bodyText = typeNode ? typeNode.getText() : 'unknown';
-  const fullTypeSource = `type ${name}${genericText} = ${bodyText};`;
-  
-  return {
-    name,
-    definition: { 
-      kind: 'raw', 
-      typescript: bodyText,
-      generics: genericText || undefined,
-    },
-    source: fullTypeSource,
-    isDependency,
-  };
-}
+  const methodName = node.expression.name.text;
+  if (methodName !== 'returns') return null;
 
-/**
- * Extract an interface declaration
- */
-function extractInterface(
-  iface: InterfaceDeclaration, 
-  isDependency: boolean
-): ExtractedType {
-  const name = iface.getName();
-  const typeParams = iface.getTypeParameters();
-  const properties = iface.getProperties();
-  const methods = iface.getMethods();
-  const extends_ = iface.getExtends();
-  
-  // Build interface body
-  const members: string[] = [];
-  
-  for (const prop of properties) {
-    const propName = prop.getName();
-    const questionToken = prop.hasQuestionToken() ? '?' : '';
-    const typeNode = prop.getTypeNode();
-    const typeText = typeNode ? typeNode.getText() : 'unknown';
-    members.push(`  ${propName}${questionToken}: ${typeText};`);
-  }
-  
-  for (const method of methods) {
-    members.push(`  ${method.getText()}`);
-  }
-  
-  const bodyText = `{\n${members.join('\n')}\n}`;
-  
-  // Build full interface text
-  let typeParamText = '';
-  if (typeParams.length > 0) {
-    const params = typeParams.map(p => {
-      const constraint = p.getConstraint();
-      const defaultType = p.getDefault();
-      let paramText = p.getName();
-      if (constraint) paramText += ` extends ${constraint.getText()}`;
-      if (defaultType) paramText += ` = ${defaultType.getText()}`;
-      return paramText;
-    }).join(', ');
-    typeParamText = `<${params}>`;
-  }
-  
-  let extendsText = '';
-  if (extends_.length > 0) {
-    extendsText = ` extends ${extends_.map(e => e.getText()).join(', ')}`;
-  }
-  
-  // Combine generics and extends for the full interface header
-  const headerSuffix = typeParamText + extendsText;
-  
-  return {
-    name,
-    definition: { 
-      kind: 'raw', 
-      typescript: `interface${headerSuffix} ${bodyText}`,
-      generics: headerSuffix || undefined, // Store as marker that this is a full interface
-    },
-    source: `interface ${name}${typeParamText}${extendsText} ${bodyText}`,
-    isDependency,
-  };
-}
+  const typeArgs = node.typeArguments;
+  if (!typeArgs || typeArgs.length === 0) return null;
 
-/**
- * Extract an enum declaration
- */
-function extractEnum(
-  enumDecl: EnumDeclaration, 
-  isDependency: boolean
-): ExtractedType {
-  const name = enumDecl.getName();
-  const members = enumDecl.getMembers();
+  const responseType = checker.getTypeFromTypeNode(typeArgs[0]);
+  const responseTypeString = getTypeName(responseType, checker);
   
-  // Build enum body
-  const memberTexts = members.map(m => {
-    const memberName = m.getName();
-    const initializer = m.getInitializer();
-    if (initializer) {
-      return `  ${memberName} = ${initializer.getText()}`;
+  // Collect type definitions for types used in routes
+  const types = new Map<string, ExtractedType>();
+  
+  function collectType(type: ts.Type) {
+    const def = extractTypeDefinition(type, checker);
+    if (def && !types.has(def.name)) {
+      types.set(def.name, { name: def.name, source: def.source });
     }
-    return `  ${memberName}`;
-  });
-  
-  const bodyText = `{\n${memberTexts.join(',\n')}\n}`;
-  
-  // For TypeScript declaration, convert enum to union of literal types
-  const values = members.map(m => {
-    const initializer = m.getInitializer();
-    if (initializer) {
-      return initializer.getText();
+    // Also collect from union types
+    if (type.isUnion()) {
+      type.types.forEach(collectType);
     }
-    // For numeric enums without initializers
-    return `'${m.getName()}'`;
-  });
+    // And array element types
+    if (checker.isArrayType(type)) {
+      const typeArgs = checker.getTypeArguments(type as ts.TypeReference);
+      typeArgs.forEach(collectType);
+    }
+  }
   
-  const unionType = values.join(' | ');
-  
+  collectType(responseType);
+
+  let method = 'GET';
+  let path = '/';
+  let paramsType: string | undefined;
+  let bodyType: string | undefined;
+  let queryType: string | undefined;
+
+  let current: ts.Node = node.expression.expression;
+
+  while (ts.isCallExpression(current)) {
+    if (ts.isPropertyAccessExpression(current.expression)) {
+      const name = current.expression.name.text;
+
+      if (name === 'params' && current.typeArguments?.[0]) {
+        const type = checker.getTypeFromTypeNode(current.typeArguments[0]);
+        paramsType = getTypeName(type, checker);
+        collectType(type);
+      }
+
+      if (name === 'body' && current.typeArguments?.[0]) {
+        const type = checker.getTypeFromTypeNode(current.typeArguments[0]);
+        bodyType = getTypeName(type, checker);
+        collectType(type);
+      }
+
+      if (name === 'query' && current.typeArguments?.[0]) {
+        const type = checker.getTypeFromTypeNode(current.typeArguments[0]);
+        queryType = getTypeName(type, checker);
+        collectType(type);
+      }
+
+      if (['get', 'post', 'put', 'patch', 'del'].includes(name)) {
+        method = name === 'del' ? 'DELETE' : name.toUpperCase();
+        
+        if (current.arguments.length > 0 && ts.isStringLiteral(current.arguments[0])) {
+          path = current.arguments[0].text;
+        }
+      }
+
+      current = current.expression.expression;
+    } else {
+      break;
+    }
+  }
+
   return {
-    name,
-    definition: { kind: 'raw', typescript: unionType },
-    source: `enum ${name} ${bodyText}`,
-    isDependency,
+    method,
+    path,
+    params: paramsType,
+    body: bodyType,
+    query: queryType,
+    response: responseTypeString,
+    types,  // Collected type definitions from routes
   };
 }
 
-/**
- * Convenience function to extract from current file
- * 
- * @example
- * // In your server.ts file:
- * type Blog = { id: string; title: string; }
- * interface Product { name: string; price: number; }
- * 
- * const types = extractFromFile(import.meta.url, ['Blog', 'Product']);
- */
+// ═══════════════════════════════════════════════════════════════════════════
+// 📤 CONVENIENCE EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════
+
 export function extractFromFile(importMetaUrl: string, typeNames: string[]): ExtractedType[] {
   return extractTypes({ file: importMetaUrl, types: typeNames });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🗂️ BATCH EXTRACTION RESULT
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Result type that allows easy destructuring
- */
 export type ExtractedTypes<T extends string> = {
-  [K in T]: TypeDefinition;
+  [K in T]: RawTypeDefinition;
 };
 
-/**
- * Extract types and return as a record for easy registration
- * 
- * @example
- * const { Blog, Product } = extractTypesAsRecord({
- *   file: import.meta.url,
- *   types: ['Blog', 'Product']
- * });
- * 
- * typeowl
- *   .domain('blog')
- *   .registerType('Blog', Blog)
- *   .registerType('Product', Product);
- */
 export function extractTypesAsRecord<T extends string>(
   options: ExtractOptions & { types: T[] }
 ): ExtractedTypes<T> {
   const extracted = extractTypes(options);
-  const result: Record<string, TypeDefinition> = {};
-  
+  const result: Record<string, RawTypeDefinition> = {};
+
   for (const type of extracted) {
-    result[type.name] = type.definition;
+    result[type.name] = type.source;
   }
-  
+
   return result as ExtractedTypes<T>;
 }

@@ -5,27 +5,25 @@
  */
 
 // Import all domain types
-import type { Blog, Author, Developer, DeveloperRole, customeType, BlogInput, Product, NoUsageType } from './content';
-import type { GetApiBlogsResponse, GetApiBlogsByIdParams, GetApiBlogsByIdResponse, PostApiBlogsBody, PostApiBlogsResponse, GetApiProductsQuery, GetApiProductsResponse, GetApiProductsByIdParams, GetApiProductsByIdResponse, GetApiUsersResponse, GetApiUsersByIdParams, GetApiUsersByIdResponse, PostApiUsersBody, PostApiUsersResponse, DeleteApiUsersByIdParams, DeleteApiUsersByIdResponse } from './endpoints';
+import type { Blog, Author, Developer, DeveloperRole, customeType, BlogInput, Product, CreateUserInput, User, IdParams, ProductQuery, DeleteResponse } from './content';
 
 // Re-export all types
-export type { Blog, Author, Developer, DeveloperRole, customeType, BlogInput, Product, NoUsageType } from './content';
-export type { GetApiBlogsResponse, GetApiBlogsByIdParams, GetApiBlogsByIdResponse, PostApiBlogsBody, PostApiBlogsResponse, GetApiProductsQuery, GetApiProductsResponse, GetApiProductsByIdParams, GetApiProductsByIdResponse, GetApiUsersResponse, GetApiUsersByIdParams, GetApiUsersByIdResponse, PostApiUsersBody, PostApiUsersResponse, DeleteApiUsersByIdParams, DeleteApiUsersByIdResponse } from './endpoints';
+export type { Blog, Author, Developer, DeveloperRole, customeType, BlogInput, Product, CreateUserInput, User, IdParams, ProductQuery, DeleteResponse } from './content';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🗺️ API ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface ApiEndpoints {
-  'GET /api/blogs': { response: GetApiBlogsResponse };
-  'GET /api/blogs/:id': { params: GetApiBlogsByIdParams; response: GetApiBlogsByIdResponse };
-  'POST /api/blogs': { body: PostApiBlogsBody; response: PostApiBlogsResponse };
-  'GET /api/products': { query: GetApiProductsQuery; response: GetApiProductsResponse };
-  'GET /api/products/:id': { params: GetApiProductsByIdParams; response: GetApiProductsByIdResponse };
-  'GET /api/users': { response: GetApiUsersResponse };
-  'GET /api/users/:id': { params: GetApiUsersByIdParams; response: GetApiUsersByIdResponse };
-  'POST /api/users': { body: PostApiUsersBody; response: PostApiUsersResponse };
-  'DELETE /api/users/:id': { params: DeleteApiUsersByIdParams; response: DeleteApiUsersByIdResponse };
+  'GET /api/blogs': { response: Blog[] };
+  'GET /api/blogs/:id': { params: IdParams; response: Blog | null };
+  'POST /api/blogs': { body: BlogInput; response: Blog };
+  'GET /api/products': { query: ProductQuery; response: Product[] };
+  'GET /api/products/:id': { params: IdParams; response: Product | null };
+  'GET /api/users': { response: User[] };
+  'GET /api/users/:id': { params: IdParams; response: User | null };
+  'POST /api/users': { body: CreateUserInput; response: User };
+  'DELETE /api/users/:id': { params: IdParams; response: DeleteResponse };
 }
 
 export type ApiEndpoint = keyof ApiEndpoints;

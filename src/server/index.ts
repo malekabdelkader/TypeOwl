@@ -9,15 +9,13 @@ import { createHash } from 'node:crypto';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import type {
   TypeManifest,
-  TypeDefinition,
+  RawTypeDefinition,
   EndpointDefinition,
   HttpMethod,
   TypeOwlServerConfig,
   TypeOwlServerPluginConfig,
-  PropertyDefinition,
   TypeFileReference,
   TypeDomain,
   TypeOwlRequestContext,
@@ -36,73 +34,33 @@ export type {
   TypeOwlResponse
 } from '../types.js';
 
-// Re-export extraction utilities
+// Re-export extraction utilities (TypeChecker-based)
 export { 
   extractTypes, 
   extractFromFile, 
   extractTypesAsRecord,
+  extractRouteTypes,
   type ExtractedType,
   type ExtractOptions,
-  type ExtractedTypes
+  type ExtractedTypes,
+  type RouteTypeInfo
 } from './extract.js';
 
-// Re-export route builder (Zod-based, framework-agnostic)
+// Re-export route builder (Pure TypeScript types, no Zod)
 export { 
   route,
   getRegisteredRoutes,
   clearRouteRegistry,
   type RouteDefinition,
   type RouteBuilder,
+  type RegisteredRoute,
   type HttpMethod as RouteHttpMethod
 } from '../route.js';
 
 // Import for internal use
-import { extractTypes as extractTypesSync } from './extract.js';
-import { getRegisteredRoutes } from '../route.js';
+import { extractTypes as extractTypesSync, extractRouteTypes as extractRouteTypesSync } from './extract.js';
+import { getRegisteredRoutes, type RegisteredRoute } from '../route.js';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔧 OPTIONAL ZOD SUPPORT
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Zod types for type annotations (these are erased at runtime)
-// eslint-disable-next-line @typescript-eslint/no-namespace
-namespace z {
-  export type ZodType<T = unknown> = {
-    _def: unknown;
-    safeParse: (data: unknown) => { success: true; data: T } | { success: false; error: { issues: unknown[] } };
-    isOptional: () => boolean;
-  };
-  export type infer<T> = T extends ZodType<infer U> ? U : never;
-}
-
-// Lazy Zod loader - only throws when actually used
-let _zod: typeof import('zod') | null = null;
-let _zodChecked = false;
-
-// Create require for ESM compatibility
-const require = createRequire(import.meta.url);
-
-function getZod(): typeof import('zod') {
-  if (!_zodChecked) {
-    _zodChecked = true;
-    try {
-      // Use createRequire for ESM compatibility
-      _zod = require('zod');
-    } catch {
-      _zod = null;
-    }
-  }
-  
-  if (!_zod) {
-    throw new Error(
-      '[TypeOwl] Zod is required for registerZod() and typeowl.endpoint().\n' +
-      'Install it with: npm install zod\n\n' +
-      'If you only need static type extraction, use the extract config instead.'
-    );
-  }
-  
-  return _zod;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🏗️ TYPE REGISTRY
@@ -186,21 +144,6 @@ export class TypeRegistry {
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
-   * Register a type from a Zod schema
-   * 
-   * @requires zod - Install with: npm install zod
-   * @throws Error if type name conflicts with existing type
-   */
-  registerZod<T extends z.ZodType>(name: string, schema: T): this {
-    // Validate Zod is installed
-    getZod();
-    
-    const typeDef = zodToTypeDefinition(schema);
-    this.registerTypeInDomain(name, typeDef);
-    return this;
-  }
-
-  /**
    * Capitalize first letter
    */
   private capitalize(str: string): string {
@@ -208,29 +151,22 @@ export class TypeRegistry {
   }
 
   /**
-   * Register a type definition directly
+   * Register a raw TypeScript type definition
+   * 
+   * @example
+   * typeowl.registerType('User', 'interface User { id: string; name: string; }');
+   * typeowl.registerType('Role', "type Role = 'admin' | 'user';");
    */
-  registerType(name: string, definition: TypeDefinition): this {
-    this.registerTypeInDomain(name, definition);
+  registerType(name: string, typescript: RawTypeDefinition): this {
+    this.registerTypeInDomain(name, typescript);
     return this;
   }
-
+  
   /**
-   * Register an object type with properties
+   * Register a type and return the actual name used (may differ if renamed due to conflict)
    */
-  registerObject(name: string, properties: Record<string, TypeDefinition | { type: TypeDefinition; optional?: boolean }>): this {
-    const props: Record<string, PropertyDefinition> = {};
-    
-    for (const [key, value] of Object.entries(properties)) {
-      if ('type' in value && 'optional' in value) {
-        props[key] = value as PropertyDefinition;
-      } else {
-        props[key] = { type: value as TypeDefinition };
-      }
-    }
-    
-    this.registerTypeInDomain(name, { kind: 'object', properties: props });
-    return this;
+  registerTypeWithName(name: string, typescript: RawTypeDefinition): string {
+    return this.registerTypeInDomain(name, typescript);
   }
 
   /**
@@ -294,69 +230,152 @@ export class TypeRegistry {
     const extracted = extractTypesSync({ file: filePath, types: typesToExtract });
     
     for (const type of extracted) {
-      this.registerTypeInDomain(type.name, type.definition);
+      // Use the raw TypeScript source directly
+      this.registerTypeInDomain(type.name, type.source);
     }
     
     return this;
   }
 
-  private registerTypeInDomain(name: string, definition: TypeDefinition): void {
+  private registerTypeInDomain(name: string, typescript: RawTypeDefinition): string {
     const domain = this.domains.get(this.currentDomain)!;
     
     // Check for name conflicts
     if (domain.types[name]) {
-      const existingHash = this.hashTypeDefinition(domain.types[name]);
-      const newHash = this.hashTypeDefinition(definition);
+      // Use TypeChecker for structural comparison
+      const areStructurallyEqual = this.compareTypesStructurally(
+        domain.types[name], 
+        typescript
+      );
       
-      if (existingHash === newHash) {
+      if (areStructurallyEqual) {
         // Same structure, skip silently
-        return;
+        return name;
       }
       
-      // Different structure with same name - ERROR with suggested fix
+      // Different content with same name - handle based on config
+      const onConflict = this.pluginConfig?.onConflict ?? 'error';
+      
+      if (onConflict === 'rename') {
+        // Auto-rename and register with new name
+        const newName = this.suggestAlternativeName(name);
+        // Update the type name in the source text
+        const renamedTypescript = typescript
+          .replace(new RegExp(`\\binterface\\s+${name}\\b`), `interface ${newName}`)
+          .replace(new RegExp(`\\btype\\s+${name}\\s*=`), `type ${newName} =`);
+        domain.types[newName] = renamedTypescript;
+        this.invalidateCache(this.currentDomain);
+        console.warn(`[TypeOwl] ⚠️ Type "${name}" renamed to "${newName}" (conflict resolution)`);
+        return newName;
+      }
+      
+      // onConflict === 'error'
       const suggestedName = this.suggestAlternativeName(name);
       throw new Error(
         `\n[TypeOwl] ❌ Type name conflict in domain "${this.currentDomain}":\n\n` +
-        `  Type "${name}" already exists with a different structure.\n\n` +
-        `  💡 Suggested fix: Rename one of the types to "${suggestedName}"\n\n` +
-        `  This can happen when:\n` +
-        `  • Static types and endpoint types have the same name\n` +
-        `  • Multiple endpoints generate types with the same name\n` +
-        `  • Nested types conflict with existing types\n`
+        `  Type "${name}" already exists with different content.\n\n` +
+        `  💡 Suggested fix: Rename one of the types to "${suggestedName}"\n` +
+        `  💡 Or set onConflict: 'rename' in your config to auto-rename\n`
       );
     }
     
     // Register the type
-    domain.types[name] = definition;
+    domain.types[name] = typescript;
     this.invalidateCache(this.currentDomain);
+    return name;
+  }
+  
+  /**
+   * Compare two type definitions structurally using TypeChecker
+   */
+  private compareTypesStructurally(type1: string, type2: string): boolean {
+    // Quick hash check first (optimization)
+    if (this.hash(type1) === this.hash(type2)) {
+      return true;
+    }
+    
+    // Use TypeChecker for structural comparison
+    try {
+      const ts = require('typescript') as typeof import('typescript');
+      
+      // Create a temporary program with both types
+      const sourceCode = `
+        type __Type1__ = ${this.extractTypeBody(type1)};
+        type __Type2__ = ${this.extractTypeBody(type2)};
+        type __Test__ = __Type1__ extends __Type2__ ? __Type2__ extends __Type1__ ? true : false : false;
+      `;
+      
+      const sourceFile = ts.createSourceFile(
+        'temp.ts',
+        sourceCode,
+        ts.ScriptTarget.Latest,
+        true
+      );
+      
+      const host: import('typescript').CompilerHost = {
+        getSourceFile: (fileName) => fileName === 'temp.ts' ? sourceFile : undefined,
+        getDefaultLibFileName: () => 'lib.d.ts',
+        writeFile: () => {},
+        getCurrentDirectory: () => '',
+        getCanonicalFileName: (f) => f,
+        useCaseSensitiveFileNames: () => true,
+        getNewLine: () => '\n',
+        fileExists: (f) => f === 'temp.ts',
+        readFile: () => undefined,
+      };
+      
+      const program = ts.createProgram(['temp.ts'], {
+        noEmit: true,
+        strict: true,
+      }, host);
+      
+      const checker = program.getTypeChecker();
+      
+      // Find the __Test__ type and check if it resolves to 'true'
+      const testSymbol = checker.getSymbolAtLocation(
+        (sourceFile.statements[2] as import('typescript').TypeAliasDeclaration).name
+      );
+      
+      if (testSymbol) {
+        const testType = checker.getDeclaredTypeOfSymbol(testSymbol);
+        const typeStr = checker.typeToString(testType);
+        return typeStr === 'true';
+      }
+      
+      return false;
+    } catch {
+      // Fallback to hash comparison if TypeChecker fails
+      return false;
+    }
+  }
+  
+  /**
+   * Extract the type body from a type definition string
+   * e.g., "interface User { id: string }" -> "{ id: string }"
+   * e.g., "type Role = 'admin' | 'user'" -> "'admin' | 'user'"
+   */
+  private extractTypeBody(typeDef: string): string {
+    // Handle interface
+    const interfaceMatch = typeDef.match(/interface\s+\w+\s*({[\s\S]*})/);
+    if (interfaceMatch) return interfaceMatch[1];
+    
+    // Handle type alias
+    const typeMatch = typeDef.match(/type\s+\w+\s*=\s*([\s\S]+);?$/);
+    if (typeMatch) return typeMatch[1].replace(/;$/, '');
+    
+    // Return as-is if no match
+    return typeDef;
   }
 
-  /**
-   * Suggest an alternative name for a conflicting type
-   */
   private suggestAlternativeName(name: string): string {
-    // Try adding domain prefix
-    if (this.currentDomain !== 'main' && !name.startsWith(this.capitalize(this.currentDomain))) {
-      return this.capitalize(this.currentDomain) + name;
-    }
-    // Try adding a number suffix
-    let counter = 2;
+    // Simple numeric suffix: User -> User1 -> User2
+    let counter = 1;
     while (this.hasType(name + counter, this.currentDomain)) {
       counter++;
     }
     return name + counter;
   }
 
-  /**
-   * Hash a type definition for comparison
-   */
-  private hashTypeDefinition(def: TypeDefinition): string {
-    return createHash('md5').update(JSON.stringify(def)).digest('hex').slice(0, 12);
-  }
-
-  /**
-   * Check if a type with this name exists in a domain
-   */
   hasType(name: string, domain?: string): boolean {
     if (domain) {
       const d = this.domains.get(domain);
@@ -368,13 +387,10 @@ export class TypeRegistry {
     return false;
   }
 
-  /**
-   * Get a type definition by name (searches all domains)
-   */
-  getType(name: string): { domain: string; definition: TypeDefinition } | null {
+  getType(name: string): { domain: string; typescript: RawTypeDefinition } | null {
     for (const [domainName, domain] of this.domains) {
       if (name in domain.types) {
-        return { domain: domainName, definition: domain.types[name] };
+        return { domain: domainName, typescript: domain.types[name] };
       }
     }
     return null;
@@ -434,242 +450,6 @@ export class TypeRegistry {
     return this.registerEndpoint('DELETE', path, { response, ...options });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Auto-Typed Endpoint Registration
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /**
-   * Register an endpoint with automatic type detection.
-   * 
-   * Supports both Zod schemas (with runtime validation) and type references
-   * (for extracted TypeScript types). The system auto-detects:
-   * - String → Type reference (e.g., 'Product', 'Blog[]')
-   * - Zod schema → Converts to TypeScript + adds validation
-   * 
-   * @example
-   * // Using Zod schemas (with runtime validation)
-   * typeowl.endpoint(app, 'POST', '/api/users', {
-   *   body: CreateUserSchema,
-   *   response: UserSchema,
-   * }, async ({ body }) => {
-   *   return await createUser(body);
-   * });
-   * 
-   * @example
-   * // Using extracted type references (no Zod needed!)
-   * typeowl.endpoint(app, 'GET', '/api/products', {
-   *   response: 'Product[]',  // References Product from extract config
-   * }, async () => products);
-   * 
-   * @example
-   * // Mix and match - Zod for body validation, type ref for response
-   * typeowl.endpoint(app, 'POST', '/api/blogs', {
-   *   body: CreateBlogSchema,  // Zod = validates input
-   *   response: 'Blog',        // String = uses extracted type
-   * }, async ({ body }) => createBlog(body));
-   */
-  endpoint<
-    TBody extends z.ZodType | string | undefined = undefined,
-    TParams extends z.ZodType | string | undefined = undefined,
-    TQuery extends z.ZodType | string | undefined = undefined,
-    TResponse extends z.ZodType | string | undefined = undefined
-  >(
-    app: unknown,
-    method: HttpMethod,
-    path: string,
-    schemas: {
-      /** 
-       * Request body type - can be:
-       * - Zod schema: Validates input and generates type
-       * - String: References an extracted type (e.g., 'CreateBlog')
-       */
-      body?: TBody;
-      /** 
-       * URL params type - can be:
-       * - Zod schema: Validates params and generates type
-       * - String: References an extracted type
-       */
-      params?: TParams;
-      /** 
-       * Query string type - can be:
-       * - Zod schema: Validates query and generates type
-       * - String: References an extracted type
-       */
-      query?: TQuery;
-      /** 
-       * Response type - can be:
-       * - Zod schema: Generates type (validates in dev mode)
-       * - String: References an extracted type (e.g., 'Product', 'Blog[]', 'User | null')
-       */
-      response?: TResponse;
-      description?: string;
-      /** Domain to register types in (default: 'endpoints') */
-      domain?: string;
-    },
-    handler: (ctx: {
-      body: TBody extends z.ZodType ? z.infer<TBody> : unknown;
-      params: TParams extends z.ZodType ? z.infer<TParams> : Record<string, string>;
-      query: TQuery extends z.ZodType ? z.infer<TQuery> : Record<string, string>;
-      request: unknown;
-      reply: unknown;
-    }) => Promise<TResponse extends z.ZodType ? z.infer<TResponse> : unknown>
-  ): this {
-    const domain = schemas.domain ?? 'endpoints';
-    const endpointName = this.generateEndpointTypeName(method, path);
-    
-    // Helper to check if value is a Zod schema
-    const isZodSchema = (val: unknown): val is z.ZodType => {
-      return val !== null && typeof val === 'object' && '_def' in val && 'safeParse' in val;
-    };
-    
-    // Check if we need Zod (only if Zod schemas are provided)
-    const hasZodSchemas = isZodSchema(schemas.body) || isZodSchema(schemas.params) || 
-                          isZodSchema(schemas.query) || isZodSchema(schemas.response);
-    if (hasZodSchemas) {
-      getZod();
-    }
-    
-    // Register types from Zod schemas and determine type names
-    this.domain(domain);
-    
-    let bodyTypeName: string | undefined;
-    let bodySchema: z.ZodType | undefined;
-    if (isZodSchema(schemas.body)) {
-      bodyTypeName = `${endpointName}Body`;
-      bodySchema = schemas.body;
-      this.registerZod(bodyTypeName, schemas.body);
-    } else if (typeof schemas.body === 'string') {
-      bodyTypeName = schemas.body;
-    }
-    
-    let paramsTypeName: string | undefined;
-    let paramsSchema: z.ZodType | undefined;
-    if (isZodSchema(schemas.params)) {
-      paramsTypeName = `${endpointName}Params`;
-      paramsSchema = schemas.params;
-      this.registerZod(paramsTypeName, schemas.params);
-    } else if (typeof schemas.params === 'string') {
-      paramsTypeName = schemas.params;
-    }
-    
-    let queryTypeName: string | undefined;
-    let querySchema: z.ZodType | undefined;
-    if (isZodSchema(schemas.query)) {
-      queryTypeName = `${endpointName}Query`;
-      querySchema = schemas.query;
-      this.registerZod(queryTypeName, schemas.query);
-    } else if (typeof schemas.query === 'string') {
-      queryTypeName = schemas.query;
-    }
-    
-    let responseTypeName: string = 'unknown';
-    let responseSchema: z.ZodType | undefined;
-    if (isZodSchema(schemas.response)) {
-      responseTypeName = `${endpointName}Response`;
-      responseSchema = schemas.response;
-      this.registerZod(responseTypeName, schemas.response);
-    } else if (typeof schemas.response === 'string') {
-      responseTypeName = schemas.response;
-    }
-    
-    // Register endpoint definition
-    this.registerEndpoint(method, path, {
-      body: bodyTypeName,
-      params: paramsTypeName,
-      query: queryTypeName,
-      response: responseTypeName,
-      description: schemas.description,
-    });
-    
-    // Create validated handler wrapper
-    const wrappedHandler = async (request: unknown, reply: unknown) => {
-      const req = request as { body?: unknown; params?: unknown; query?: unknown };
-      const rep = reply as { code: (n: number) => { send: (data: unknown) => unknown } };
-      
-      try {
-        // Validate body (only if Zod schema was provided)
-        let validatedBody: unknown = req.body;
-        if (bodySchema && req.body !== undefined) {
-          const result = bodySchema.safeParse(req.body);
-          if (!result.success) {
-            return rep.code(400).send({
-              error: 'Validation failed',
-              field: 'body',
-              issues: result.error.issues,
-            });
-          }
-          validatedBody = result.data;
-        }
-        
-        // Validate params (only if Zod schema was provided)
-        let validatedParams: unknown = req.params ?? {};
-        if (paramsSchema && req.params !== undefined) {
-          const result = paramsSchema.safeParse(req.params);
-          if (!result.success) {
-            return rep.code(400).send({
-              error: 'Validation failed',
-              field: 'params',
-              issues: result.error.issues,
-            });
-          }
-          validatedParams = result.data;
-        }
-        
-        // Validate query (only if Zod schema was provided)
-        let validatedQuery: unknown = req.query ?? {};
-        if (querySchema && req.query !== undefined) {
-          const result = querySchema.safeParse(req.query);
-          if (!result.success) {
-            return rep.code(400).send({
-              error: 'Validation failed',
-              field: 'query',
-              issues: result.error.issues,
-            });
-          }
-          validatedQuery = result.data;
-        }
-        
-        // Call handler with validated data
-        const response = await handler({
-          body: validatedBody as never,
-          params: validatedParams as never,
-          query: validatedQuery as never,
-          request,
-          reply,
-        });
-        
-        // Validate response (optional, for development, only if Zod schema provided)
-        if (responseSchema && process.env.NODE_ENV !== 'production') {
-          const result = responseSchema.safeParse(response);
-          if (!result.success) {
-            console.warn(`[TypeOwl] Response validation failed for ${method} ${path}:`, result.error.issues);
-          }
-        }
-        
-        return response;
-      } catch (error) {
-        console.error(`[TypeOwl] Handler error for ${method} ${path}:`, error);
-        return rep.code(500).send({ error: 'Internal server error' });
-      }
-    };
-    
-    // Register route on the app (framework-agnostic via duck typing)
-    const fastifyApp = app as { 
-      get?: (path: string, handler: unknown) => void;
-      post?: (path: string, handler: unknown) => void;
-      put?: (path: string, handler: unknown) => void;
-      patch?: (path: string, handler: unknown) => void;
-      delete?: (path: string, handler: unknown) => void;
-    };
-    
-    const methodLower = method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
-    if (fastifyApp[methodLower]) {
-      fastifyApp[methodLower]!(path, wrappedHandler);
-    }
-    
-    return this;
-  }
-
   /**
    * Generate a type name from method and path
    */
@@ -694,18 +474,62 @@ export class TypeRegistry {
   }
 
   /**
-   * Register endpoint types from route.get()/post()/etc. builder.
-   * Call this after defining routes with the route builder API.
+   * Extract and register route types from a source file using TypeChecker.
+   * 
+   * This scans the source file for route.get().returns<T>() patterns and
+   * extracts the type arguments to generate endpoint type definitions.
    * 
    * @example
-   * import { route } from 'typeowl/server';
-   * 
-   * const getUsers = route.get('/api/users').returns(z.array(UserSchema));
-   * const getUser = route.get('/api/users/:id').withParams(IdSchema).returns(UserSchema);
-   * 
-   * // In your server setup:
    * const typeowl = await initTypeOwl();
-   * typeowl.registerRoutesFromBuilder();  // Generates types from route definitions
+   * typeowl.extractRoutes(import.meta.url);  // Extracts from current file
+   */
+  extractRoutes(sourceFile: string, _domain: string = 'endpoints'): this {
+    // Resolve file path
+    let filePath: string;
+    if (sourceFile.startsWith('file://')) {
+      filePath = fileURLToPath(sourceFile);
+    } else if (sourceFile.startsWith('/')) {
+      filePath = sourceFile;
+    } else {
+      filePath = resolve(process.cwd(), sourceFile);
+    }
+    
+    // Use extractRouteTypes from extract.js (already imported at top)
+    const routes = extractRouteTypesSync(filePath);
+    
+    if (routes.length === 0) {
+      return this;
+    }
+    
+    // Register types used in routes to content domain
+    this.domain('content');
+    for (const route of routes) {
+      // Register any types collected from this route
+      for (const [typeName, extractedType] of route.types) {
+        if (!this.hasType(typeName, 'content')) {
+          this.registerType(typeName, extractedType.source);
+        }
+      }
+    }
+    
+    // Register endpoints with type names (types are in content.d.ts)
+    for (const route of routes) {
+      this.registerEndpoint(route.method as HttpMethod, route.path, {
+        params: route.params,
+        body: route.body,
+        query: route.query,
+        response: route.response,
+      });
+    }
+    
+    return this;
+  }
+
+  /**
+   * Register endpoint metadata from route.get()/post()/etc. builder.
+   * 
+   * Note: This only registers metadata. For full type extraction,
+   * use extractRoutes(import.meta.url) instead.
    */
   registerRoutesFromBuilder(domain: string = 'endpoints'): this {
     const routes = getRegisteredRoutes();
@@ -714,55 +538,20 @@ export class TypeRegistry {
       return this;
     }
     
-    // Helper to check if value is a Zod schema
-    const isZodSchema = (val: unknown): val is z.ZodType => {
-      return val !== null && typeof val === 'object' && '_def' in val && 'safeParse' in val;
-    };
-    
-    // Check if we need Zod
-    const hasZodSchemas = routes.some(r => 
-      isZodSchema(r.schemas.params) || isZodSchema(r.schemas.body) || 
-      isZodSchema(r.schemas.query) || isZodSchema(r.schemas.response)
-    );
-    if (hasZodSchemas) {
-      getZod();
-    }
-    
     this.domain(domain);
     
-    for (const route of routes) {
-      const endpointName = this.generateEndpointTypeName(route.method as HttpMethod, route.path);
+    for (const registeredRoute of routes) {
+      const endpointName = this.generateEndpointTypeName(
+        registeredRoute.method as HttpMethod, 
+        registeredRoute.path
+      );
       
-      let paramsTypeName: string | undefined;
-      if (isZodSchema(route.schemas.params)) {
-        paramsTypeName = `${endpointName}Params`;
-        this.registerZod(paramsTypeName, route.schemas.params);
-      }
-      
-      let bodyTypeName: string | undefined;
-      if (isZodSchema(route.schemas.body)) {
-        bodyTypeName = `${endpointName}Body`;
-        this.registerZod(bodyTypeName, route.schemas.body);
-      }
-      
-      let queryTypeName: string | undefined;
-      if (isZodSchema(route.schemas.query)) {
-        queryTypeName = `${endpointName}Query`;
-        this.registerZod(queryTypeName, route.schemas.query);
-      }
-      
-      let responseTypeName: string = 'unknown';
-      if (isZodSchema(route.schemas.response)) {
-        responseTypeName = `${endpointName}Response`;
-        this.registerZod(responseTypeName, route.schemas.response);
-      }
-      
-      // Register endpoint definition
-      this.registerEndpoint(route.method as HttpMethod, route.path, {
-        params: paramsTypeName,
-        body: bodyTypeName,
-        query: queryTypeName,
-        response: responseTypeName,
+      // Register endpoint with generated type names
+      this.registerEndpoint(registeredRoute.method as HttpMethod, registeredRoute.path, {
+        params: registeredRoute.hasParams ? `${endpointName}Params` : undefined,
+        body: registeredRoute.hasBody ? `${endpointName}Body` : undefined,
+        query: registeredRoute.hasQuery ? `${endpointName}Query` : undefined,
+        response: `${endpointName}Response`,
       });
     }
     
@@ -797,9 +586,15 @@ export class TypeRegistry {
       ''
     ];
 
-    // Generate type definitions
-    for (const [name, def] of Object.entries(domain.types)) {
-      lines.push(`export ${typeDefinitionToTS(name, def)}`);
+    // Output raw TypeScript definitions directly
+    for (const [, typescript] of Object.entries(domain.types)) {
+      // Add export if not already exported
+      const trimmed = typescript.trim();
+      if (trimmed.startsWith('export ')) {
+        lines.push(trimmed);
+      } else {
+        lines.push(`export ${trimmed}`);
+      }
       lines.push('');
     }
 
@@ -1135,230 +930,6 @@ export class TypeRegistry {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔄 ZOD TO TYPE DEFINITION CONVERTER
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Internal Zod definition types (supports both Zod v3 and v4)
-interface ZodDefV3 {
-  typeName?: string;      // Zod v3: 'ZodString', 'ZodObject', etc.
-  value?: unknown;        // Literal value
-  values?: readonly unknown[];  // Enum values in v3
-  type?: z.ZodType;       // Array element in v3
-  shape?: () => Record<string, z.ZodType>;  // Object shape (function in v3)
-  options?: z.ZodType[];  // Union options
-  left?: z.ZodType;       // Intersection left
-  right?: z.ZodType;      // Intersection right
-  innerType?: z.ZodType;  // Optional/Nullable/Default inner type
-}
-
-interface ZodDefV4 {
-  type?: string;          // Zod v4: 'string', 'object', 'array', etc.
-  values?: unknown[];     // Literal values in v4
-  entries?: Record<string, string | number>;  // Enum entries in v4
-  element?: z.ZodType;    // Array element in v4
-  shape?: Record<string, z.ZodType>;  // Object shape (object in v4)
-  options?: z.ZodType[];  // Union options
-  left?: z.ZodType;       // Intersection left
-  right?: z.ZodType;      // Intersection right
-  innerType?: z.ZodType;  // Optional/Nullable/Default inner type
-}
-
-type ZodDef = ZodDefV3 & ZodDefV4;
-
-/**
- * Get the Zod type name, supporting both v3 and v4
- * v3 uses _def.typeName (e.g., 'ZodString')
- * v4 uses _def.type (e.g., 'string')
- */
-function getZodTypeName(schema: z.ZodType): string {
-  const def = schema._def as ZodDef;
-  
-  // Zod v3: typeName is 'ZodString', 'ZodObject', etc.
-  if (def.typeName) {
-    return def.typeName;
-  }
-  
-  // Zod v4: type is 'string', 'object', etc.
-  if (typeof def.type === 'string') {
-    return def.type;
-  }
-  
-  // Fallback: use constructor name
-  return schema.constructor.name;
-}
-
-function zodToTypeDefinition(schema: z.ZodType): TypeDefinition {
-  const def = schema._def as ZodDef;
-  const typeName = getZodTypeName(schema);
-
-  // Normalize type name (support both v3 'ZodString' and v4 'string' formats)
-  const normalizedType = typeName.replace(/^Zod/, '').toLowerCase();
-
-  switch (normalizedType) {
-    case 'string':
-      return { kind: 'primitive', value: 'string' };
-    case 'number':
-      return { kind: 'primitive', value: 'number' };
-    case 'boolean':
-      return { kind: 'primitive', value: 'boolean' };
-    case 'null':
-      return { kind: 'primitive', value: 'null' };
-    case 'undefined':
-      return { kind: 'primitive', value: 'undefined' };
-    case 'any':
-      return { kind: 'primitive', value: 'any' };
-    case 'unknown':
-      return { kind: 'primitive', value: 'unknown' };
-    case 'void':
-      return { kind: 'primitive', value: 'void' };
-      
-    case 'literal': {
-      // v3: def.value, v4: def.values[0]
-      const value = def.value ?? (def.values as unknown[])?.[0];
-      return { kind: 'literal', value: value as string | number | boolean };
-    }
-
-    case 'enum': {
-      // Convert enum to union of literals
-      // v3: def.values is an array
-      // v4: def.entries is an object { a: 'a', b: 'b', ... }
-      let values: (string | number)[];
-      if (def.entries) {
-        values = Object.values(def.entries);
-      } else if (def.values) {
-        values = def.values as (string | number)[];
-      } else {
-        values = [];
-      }
-      return {
-        kind: 'union',
-        types: values.map(v => ({ kind: 'literal' as const, value: v }))
-      };
-    }
-      
-    case 'array': {
-      // v3: def.type, v4: def.element
-      const element = def.element ?? def.type;
-      if (!element) return { kind: 'array', element: { kind: 'primitive', value: 'unknown' } };
-      return { kind: 'array', element: zodToTypeDefinition(element as z.ZodType) };
-    }
-      
-    case 'object': {
-      // v3: def.shape is a function, v4: def.shape is an object
-      const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
-      if (!shape) return { kind: 'object', properties: {} };
-      
-      const properties: Record<string, PropertyDefinition> = {};
-      
-      for (const [key, value] of Object.entries(shape)) {
-        properties[key] = {
-          type: zodToTypeDefinition(value as z.ZodType),
-          optional: (value as z.ZodType).isOptional()
-        };
-      }
-      
-      return { kind: 'object', properties };
-    }
-    
-    case 'union':
-      if (!def.options) return { kind: 'primitive', value: 'unknown' };
-      return { 
-        kind: 'union', 
-        types: def.options.map((opt: z.ZodType) => zodToTypeDefinition(opt)) 
-      };
-      
-    case 'intersection':
-      if (!def.left || !def.right) return { kind: 'primitive', value: 'unknown' };
-      return { 
-        kind: 'intersection', 
-        types: [zodToTypeDefinition(def.left), zodToTypeDefinition(def.right)] 
-      };
-      
-    case 'optional':
-      if (!def.innerType) return { kind: 'primitive', value: 'unknown' };
-      return { kind: 'optional', type: zodToTypeDefinition(def.innerType) };
-      
-    case 'nullable':
-      if (!def.innerType) return { kind: 'primitive', value: 'unknown' };
-      return { 
-        kind: 'union', 
-        types: [zodToTypeDefinition(def.innerType), { kind: 'primitive', value: 'null' }] 
-      };
-
-    case 'default':
-      // Default values don't change the type, just unwrap
-      if (!def.innerType) return { kind: 'primitive', value: 'unknown' };
-      return zodToTypeDefinition(def.innerType);
-      
-    default:
-      return { kind: 'primitive', value: 'unknown' };
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📝 TYPE DEFINITION TO TYPESCRIPT
-// ═══════════════════════════════════════════════════════════════════════════
-
-function typeDefinitionToTS(name: string, def: TypeDefinition): string {
-  if (def.kind === 'object') {
-    const props = Object.entries(def.properties)
-      .map(([key, prop]) => {
-        const optional = prop.optional ? '?' : '';
-        return `  ${key}${optional}: ${typeDefToTSType(prop.type)};`;
-      })
-      .join('\n');
-    return `interface ${name} {\n${props}\n}`;
-  }
-  
-  // Handle raw types with generics or full declarations
-  if (def.kind === 'raw') {
-    // Check if this is a full interface declaration
-    if (def.typescript.startsWith('interface')) {
-      return `${def.typescript.replace(/^interface/, `interface ${name}`)};`;
-    }
-    // Handle type with generics
-    if (def.generics) {
-      return `type ${name}${def.generics} = ${def.typescript};`;
-    }
-  }
-  
-  return `type ${name} = ${typeDefToTSType(def)};`;
-}
-
-function typeDefToTSType(def: TypeDefinition): string {
-  switch (def.kind) {
-    case 'primitive':
-      return def.value;
-    case 'literal':
-      return typeof def.value === 'string' ? `'${def.value}'` : String(def.value);
-    case 'array':
-      const element = typeDefToTSType(def.element);
-      return element.includes('|') ? `(${element})[]` : `${element}[]`;
-    case 'object': {
-      const props = Object.entries(def.properties)
-        .map(([key, prop]) => {
-          const optional = prop.optional ? '?' : '';
-          return `${key}${optional}: ${typeDefToTSType(prop.type)}`;
-        })
-        .join('; ');
-      return `{ ${props} }`;
-    }
-    case 'union':
-      return def.types.map(t => typeDefToTSType(t)).join(' | ');
-    case 'intersection':
-      return def.types.map(t => typeDefToTSType(t)).join(' & ');
-    case 'reference':
-      return def.name;
-    case 'optional':
-      return `${typeDefToTSType(def.type)} | undefined`;
-    case 'raw':
-      // Raw TypeScript - already valid TS syntax
-      return def.typescript;
-    default:
-      return 'unknown';
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🚀 FACTORY FUNCTIONS
@@ -1409,9 +980,13 @@ export function createTypeOwlFromConfig(config: TypeOwlServerPluginConfig): Type
     }
   }
   
-  // Auto-register routes from route.get()/post()/etc. builder
-  // This generates endpoint types from Zod schemas defined with the route builder API
-  registry.registerRoutesFromBuilder();
+  // Extract route types from specified source files using TypeChecker
+  if (config.routes) {
+    const routeFiles = Array.isArray(config.routes) ? config.routes : [config.routes];
+    for (const routeFile of routeFiles) {
+      registry.extractRoutes(routeFile);
+    }
+  }
   
   return registry;
 }
