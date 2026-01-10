@@ -438,6 +438,7 @@ export default defineConfig({
 
 - 🎯 **Pure TypeScript** — Define types with regular interfaces/types, no special schemas
 - 🔬 **TypeChecker extraction** — Uses TypeScript Compiler API for robust type resolution
+- ✅ **Typia-compatible** — Use [Typia](https://typia.io) for validation from the same types
 - 🌐 **Multi-framework** — `route.get()` works with Fastify, Express, Hono, Next.js, Koa
 - 🔄 **Incremental sync** — Only fetches files that changed (via hash comparison)
 - 📦 **Domain organization** — Separate types by domain (users, posts, content)
@@ -448,6 +449,28 @@ export default defineConfig({
 - 👀 **Watch mode** — Auto-refresh on changes
 - 🔒 **Guard config** — Protect TypeOwl endpoints with API keys
 - 🚀 **Independent deploys** — Commit types to guarantee compatibility
+
+### Optional: Validation with Typia
+
+TypeOwl doesn't include validation. Use [Typia](https://typia.io) — it uses the same types from your route definitions:
+
+```typescript
+import { route } from 'typeowl/server';
+import typia from 'typia';
+
+// Define route with body type
+const createUser = route.post('/api/users')
+  .body<CreateUserInput>()
+  .returns<User>();
+
+// Use route's body type for validation!
+app.post(createUser.path, async (req) => {
+  const input = typia.assert<createUser.bodyType>(req.body);
+  return createNewUser(input);
+});
+```
+
+**Why Typia?** Access types directly from route (`route.bodyType`, `route.paramsType`, `route.responseType`). No runtime schema overhead — validators generated at compile time. 10-1000x faster than Zod/Yup.
 
 ## Server Configuration
 

@@ -16,8 +16,8 @@
   <!-- Primary Meta Tags -->
   <title>TypeOwl - Runtime Type Synchronization for TypeScript</title>
   <meta name="title" content="TypeOwl - Runtime Type Synchronization for TypeScript">
-  <meta name="description" content="Share TypeScript types between backend and frontend over HTTP. No monorepo required. Incremental sync, Zod validation, and full autocomplete.">
-  <meta name="keywords" content="TypeScript, types, API, REST, type safety, Zod, validation, monorepo, microservices">
+  <meta name="description" content="Share TypeScript types between backend and frontend over HTTP. No monorepo required. Pure TypeScript, TypeChecker extraction, and full autocomplete.">
+  <meta name="keywords" content="TypeScript, types, API, REST, type safety, TypeChecker, monorepo, microservices">
   <meta name="author" content="TypeOwl">
   <meta name="robots" content="index, follow">
   
@@ -828,28 +828,28 @@
           <span class="code-dot red"></span>
           <span class="code-dot yellow"></span>
           <span class="code-dot green"></span>
-          <span class="code-title">backend/server.ts — route.get() <i class="fa-solid fa-star" style="color: var(--accent);"></i> Recommended</span>
+          <span class="code-title">backend/server.ts — Pure TypeScript <i class="fa-solid fa-star" style="color: var(--accent);"></i></span>
         </div>
         <div class="code-content">
-<span class="keyword">import</span> { z } <span class="keyword">from</span> <span class="string">'zod'</span>;
 <span class="keyword">import</span> { <span class="function">route</span> } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
+<span class="keyword">import</span> typia <span class="keyword">from</span> <span class="string">'typia'</span>; <span class="comment">// Optional: for validation</span>
 
-<span class="comment">// Define routes (framework-agnostic!)</span>
-<span class="keyword">const</span> getUsers = route.<span class="function">get</span>(<span class="string">'/api/users'</span>)
-  .<span class="function">returns</span>(z.<span class="function">array</span>(<span class="type">UserSchema</span>));
+<span class="comment">// Define types with regular TypeScript</span>
+<span class="keyword">interface</span> <span class="type">User</span> { id: <span class="type">string</span>; name: <span class="type">string</span>; email: <span class="type">string</span>; }
+<span class="keyword">interface</span> <span class="type">CreateUserInput</span> { name: <span class="type">string</span>; email: <span class="type">string</span>; }
 
+<span class="comment">// Define routes with type parameters</span>
+<span class="keyword">const</span> getUsers = route.<span class="function">get</span>(<span class="string">'/api/users'</span>).<span class="function">returns</span>&lt;<span class="type">User</span>[]&gt;();
 <span class="keyword">const</span> createUser = route.<span class="function">post</span>(<span class="string">'/api/users'</span>)
-  .<span class="function">withBody</span>(<span class="type">CreateUserSchema</span>)
-  .<span class="function">returns</span>(<span class="type">UserSchema</span>);
+  .<span class="function">body</span>&lt;<span class="type">CreateUserInput</span>&gt;()  <span class="comment">// Types extracted for frontend</span>
+  .<span class="function">returns</span>&lt;<span class="type">User</span>&gt;();
 
-<span class="comment">// Wire up with your framework</span>
-app.<span class="function">get</span>(getUsers.path, <span class="keyword">async</span> () => {
-  <span class="keyword">return</span> getUsers.<span class="function">response</span>(users);
-});
-
+<span class="comment">// Wire up with any framework + validate with Typia</span>
+app.<span class="function">get</span>(getUsers.path, <span class="keyword">async</span> () => users);
 app.<span class="function">post</span>(createUser.path, <span class="keyword">async</span> (req) => {
-  <span class="keyword">const</span> input = createUser.<span class="function">body</span>(req.body); <span class="comment">// Validates!</span>
-  <span class="keyword">return</span> createUser.<span class="function">response</span>(<span class="function">createUser</span>(input));
+  <span class="comment">// Use route's body type for validation!</span>
+  <span class="keyword">const</span> input = typia.<span class="function">assert</span>&lt;createUser.bodyType&gt;(req.body);
+  <span class="keyword">return</span> <span class="function">createNewUser</span>(input);
 });
         </div>
       </div>
@@ -882,13 +882,12 @@ app.<span class="function">post</span>(createUser.path, <span class="keyword">as
       </div>
     </div>
 
-    <!-- Static-only Note -->
+    <!-- Typia Note -->
     <div style="max-width: 800px; margin: 2rem auto 0; text-align: center; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border);">
       <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0;">
-        <i class="fa-solid fa-info-circle" style="color: var(--accent); margin-right: 0.5rem;"></i>
-        <strong>Endpoints are optional.</strong> Just need to share types without API contracts? 
-        Use <a href="/docs/index.html#static-only" style="color: var(--accent);">static extraction</a> — 
-        no Zod, no route definitions, just auto-import from backend to frontend.
+        <i class="fa-solid fa-shield-halved" style="color: var(--accent); margin-right: 0.5rem;"></i>
+        <strong>No validation out of the box.</strong> Use <a href="https://typia.io" target="_blank" style="color: var(--accent);">Typia</a> with 
+        <code>typia.assert&lt;route.bodyType&gt;()</code> — same type, 10-1000x faster than Zod.
       </p>
     </div>
   </section>
@@ -962,9 +961,9 @@ app.<span class="function">post</span>(createUser.path, <span class="keyword">as
       </div>
 
       <div class="feature-card">
-        <div class="feature-icon"><i class="fa-solid fa-shield-halved"></i></div>
-        <h3>Zod-Powered Validation</h3>
-        <p>Use <code>route.get()</code> or <code>typeowl.endpoint()</code> with Zod schemas for runtime validation and type inference.</p>
+        <div class="feature-icon"><i class="fa-solid fa-code"></i></div>
+        <h3>Pure TypeScript</h3>
+        <p>Define types with regular interfaces. TypeChecker extracts them automatically. Use <a href="https://typia.io" target="_blank" style="color: var(--accent);">Typia</a> for validation from the same types.</p>
       </div>
     </div>
   </section>

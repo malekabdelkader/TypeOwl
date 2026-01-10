@@ -491,6 +491,7 @@
           <li><a href="#route-api">route.get() <i class="fa-solid fa-star" style="color: var(--accent);"></i></a></li>
           <li><a href="#type-extraction">Type Extraction</a></li>
           <li><a href="#conflict-resolution">Conflict Resolution</a></li>
+          <li><a href="#validation">Validation (Typia)</a></li>
           <li><a href="#static-only">Static Only</a></li>
         </ul>
       </div>
@@ -763,6 +764,39 @@ app.<span class="function">post</span>(createUser.path, <span class="keyword">as
       <div class="callout callout-info">
         <strong><i class="fa-solid fa-lightbulb"></i> Structural Comparison</strong>
         TypeOwl uses the TypeScript Compiler API to compare types by structure, not by name or source location. Two interfaces with identical properties are considered the same type.
+      </div>
+
+      <h2 id="validation">Validation with Typia (Optional)</h2>
+      <p>
+        TypeOwl doesn't include validation. Use <a href="https://typia.io" target="_blank">Typia</a> for runtime validation — it uses the same types from your route definitions:
+      </p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="filename">server.ts</span>
+        </div>
+        <div class="code-content"><span class="keyword">import</span> { route } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
+<span class="keyword">import</span> typia <span class="keyword">from</span> <span class="string">'typia'</span>;
+
+<span class="comment">// Define route with body type</span>
+<span class="keyword">const</span> createUser = route.<span class="function">post</span>(<span class="string">'/api/users'</span>)
+  .<span class="function">body</span>&lt;<span class="type">CreateUserInput</span>&gt;()
+  .<span class="function">returns</span>&lt;<span class="type">User</span>&gt;();
+
+<span class="comment">// Use route's body type for validation!</span>
+app.<span class="function">post</span>(createUser.path, <span class="keyword">async</span> (req) => {
+  <span class="keyword">const</span> input = typia.<span class="function">assert</span>&lt;createUser.bodyType&gt;(req.body);
+  <span class="keyword">return</span> createNewUser(input);
+});</div>
+      </div>
+
+      <div class="callout callout-success">
+        <strong><i class="fa-solid fa-check"></i> Why Typia?</strong>
+        <ul style="margin-top: 0.5rem; padding-left: 1.25rem;">
+          <li>Access types directly: <code>route.bodyType</code>, <code>route.paramsType</code>, <code>route.responseType</code></li>
+          <li>No runtime schema overhead — validators generated at compile time</li>
+          <li>10-1000x faster than Zod/Yup</li>
+        </ul>
       </div>
 
       <h2 id="static-only">Static Extraction Only (No Routes)</h2>

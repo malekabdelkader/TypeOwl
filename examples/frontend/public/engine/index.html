@@ -806,54 +806,54 @@
 }</div>
     </div>
 
-    <h2><span class="icon"><i class="fa-solid fa-bolt"></i></span> Step 4: Zod Integration (Optional)</h2>
+    <h2><span class="icon"><i class="fa-solid fa-bolt"></i></span> Step 4: TypeChecker Extraction</h2>
     <p>
-      When you use <code>typeowl.endpoint()</code> with Zod schemas, TypeOwl does two things:
+      TypeOwl uses the <strong>TypeScript Compiler API (TypeChecker)</strong> to extract types from your code:
     </p>
 
     <div class="arch-box">
       <h4>
-        <span>1. Type Generation</span>
-        <span class="tag">Compile Time</span>
+        <span>1. Route Scanning</span>
+        <span class="tag">Build Time</span>
       </h4>
-      <p>Zod schemas are converted to TypeScript types using the same internal representation:</p>
+      <p>TypeChecker scans your route definitions and extracts generic type arguments:</p>
       <div class="code-block" style="margin-top: 1rem;">
-        <div class="code-content"><span class="comment">// Zod schema</span>
-z.object({
-  id: z.string(),
-  role: z.enum([<span class="string">'admin'</span>, <span class="string">'user'</span>])
-})
+        <div class="code-content"><span class="comment">// Your code</span>
+<span class="keyword">const</span> getUsers = route.<span class="function">get</span>(<span class="string">'/api/users'</span>).<span class="function">returns</span>&lt;<span class="type">User</span>[]&gt;();
 
-<span class="comment">// Becomes TypeScript</span>
-<span class="keyword">interface</span> <span class="type">User</span> {
-  id: <span class="type">string</span>;
-  role: <span class="string">'admin'</span> | <span class="string">'user'</span>;
-}</div>
+<span class="comment">// TypeChecker extracts:</span>
+<span class="comment">// - Path: '/api/users'</span>
+<span class="comment">// - Method: GET</span>
+<span class="comment">// - Response type: User[]</span></div>
       </div>
     </div>
 
     <div class="arch-box">
       <h4>
-        <span>2. Runtime Validation</span>
-        <span class="tag">Runtime</span>
+        <span>2. Type Resolution</span>
+        <span class="tag">Build Time</span>
       </h4>
-      <p>Incoming requests are validated before reaching your handler:</p>
+      <p>Referenced types are resolved and extracted with their full definitions:</p>
       <div class="code-block" style="margin-top: 1rem;">
-        <div class="code-content"><span class="comment">// TypeOwl wraps your handler</span>
-<span class="keyword">const</span> wrappedHandler = <span class="keyword">async</span> (request, reply) => {
-  <span class="comment">// Validate body with Zod</span>
-  <span class="keyword">const</span> result = bodySchema.safeParse(request.body);
-  
-  <span class="keyword">if</span> (!result.success) {
-    <span class="keyword">return</span> reply.code(<span class="number">400</span>).send({
-      error: <span class="string">'Validation failed'</span>,
-      issues: result.error.issues
-    });
-  }
-  
-  <span class="comment">// Call your handler with validated data</span>
-  <span class="keyword">return</span> handler({ body: result.data, ... });
-};</div>
+        <div class="code-content"><span class="comment">// TypeChecker follows type references</span>
+<span class="keyword">interface</span> <span class="type">User</span> { id: <span class="type">string</span>; name: <span class="type">string</span>; role: <span class="type">Role</span>; }
+<span class="keyword">type</span> <span class="type">Role</span> = <span class="string">'admin'</span> | <span class="string">'user'</span> | <span class="string">'guest'</span>;
+
+<span class="comment">// Both User and Role are extracted to content.d.ts</span></div>
+      </div>
+    </div>
+
+    <div class="arch-box">
+      <h4>
+        <span>3. Conflict Resolution</span>
+        <span class="tag">Build Time</span>
+      </h4>
+      <p>When duplicate type names are found, TypeOwl uses structural comparison:</p>
+      <div class="code-block" style="margin-top: 1rem;">
+        <div class="code-content"><span class="comment">// Same structure = merged silently</span>
+<span class="comment">// Different structure = handled by onConflict config</span>
+onConflict: <span class="string">'error'</span>   <span class="comment">// Throw error with suggestion</span>
+onConflict: <span class="string">'rename'</span>  <span class="comment">// Auto-rename: User -> User1</span></div>
       </div>
     </div>
 
@@ -865,15 +865,15 @@ z.object({
 
     <div class="code-block">
       <div class="code-header">
-        <span class="filename">.typeowl/endpoints.d.ts (generated)</span>
+        <span class="filename">.typeowl/index.d.ts (generated)</span>
       </div>
       <div class="code-content"><span class="keyword">export interface</span> <span class="type">ApiEndpoints</span> {
   <span class="string">'GET /api/users'</span>: { 
     response: <span class="type">User</span>[] 
   };
   <span class="string">'GET /api/users/:id'</span>: { 
-    params: { id: <span class="type">string</span> }; 
-    response: <span class="type">User</span> 
+    params: <span class="type">IdParams</span>; 
+    response: <span class="type">User</span> | <span class="keyword">null</span>
   };
   <span class="string">'POST /api/users'</span>: { 
     body: <span class="type">CreateUserInput</span>; 

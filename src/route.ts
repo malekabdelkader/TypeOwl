@@ -43,7 +43,13 @@ export interface RouteDefinition<
   /** URL path pattern */
   readonly path: TPath;
   
-  /** Type markers for TypeChecker extraction (not used at runtime) */
+  /** Direct type access for validation (e.g., typia.assert<route.bodyType>()) */
+  readonly paramsType: TParams;
+  readonly bodyType: TBody;
+  readonly queryType: TQuery;
+  readonly responseType: TResponse;
+  
+  /** Type markers for TypeChecker extraction (internal) */
   readonly _types: {
     params: TParams;
     body: TBody;
@@ -167,6 +173,11 @@ function createRouteBuilder<TMethod extends HttpMethod>(method: TMethod) {
         const definition: RouteDefinition<TMethod, TPath, never, never, never, T> = {
           method: state.method as TMethod,
           path: state.path as TPath,
+          // Direct type access (phantom types - undefined at runtime, typed at compile time)
+          paramsType: undefined as never,
+          bodyType: undefined as never,
+          queryType: undefined as never,
+          responseType: undefined as unknown as T,
           _types: {
             params: undefined as never,
             body: undefined as never,
