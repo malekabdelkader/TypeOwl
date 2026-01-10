@@ -1,22 +1,25 @@
 /**
- * 🦉 TypeOwl Route Builder (Zod-based)
+ * 🦉 TypeOwl Route Builder
  * 
- * Framework-agnostic route definition with Zod validation.
- * Define routes once, wire up with your server framework.
+ * Framework-agnostic route definition with pure TypeScript types.
+ * Define routes once with type generics, wire up with your server framework.
+ * TypeOwl extracts types at build time using TypeChecker.
  * 
  * @example
- * const createBlog = route.post('/api/blogs')
- *   .withBody(BlogInputSchema)
- *   .returns(BlogSchema);
+ * interface User { id: string; name: string; }
+ * interface IdParams { id: string; }
+ * 
+ * const getUserById = route
+ *   .get('/api/users/:id')
+ *   .params<IdParams>()
+ *   .returns<User | null>();
  * 
  * // Use with Fastify, Express, Hono, etc.
- * app.post(createBlog.path, async (request) => {
- *   const input = createBlog.body(request.body);  // Validates!
- *   return createBlog.response(newBlog);
+ * app.get(getUserById.path, async (request) => {
+ *   const params = request.params as IdParams;
+ *   return user;
  * });
  */
-
-import type { z } from 'zod';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 📦 TYPES
@@ -25,94 +28,78 @@ import type { z } from 'zod';
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /**
- * Route definition with Zod schemas for validation.
+ * Finalized route definition with type information
  */
 export interface RouteDefinition<
   TMethod extends HttpMethod = HttpMethod,
   TPath extends string = string,
-  TParams extends z.ZodType | undefined = undefined,
-  TBody extends z.ZodType | undefined = undefined,
-  TQuery extends z.ZodType | undefined = undefined,
-  TResponse extends z.ZodType | undefined = undefined
+  TParams = never,
+  TBody = never,
+  TQuery = never,
+  TResponse = unknown
 > {
   /** HTTP method */
   readonly method: TMethod;
   /** URL path pattern */
   readonly path: TPath;
   
-  /** Zod schemas (for TypeOwl to extract types) */
-  readonly schemas: {
-    params?: TParams;
-    body?: TBody;
-    query?: TQuery;
-    response?: TResponse;
+  /** Type markers for TypeChecker extraction (not used at runtime) */
+  readonly _types: {
+    params: TParams;
+    body: TBody;
+    query: TQuery;
+    response: TResponse;
   };
-  
-  /**
-   * Parse and validate URL params.
-   * @throws ZodError if validation fails
-   */
-  params: TParams extends z.ZodType 
-    ? (data: unknown) => z.infer<TParams>
-    : (data: unknown) => Record<string, string>;
-  
-  /**
-   * Parse and validate request body.
-   * @throws ZodError if validation fails
-   */
-  body: TBody extends z.ZodType
-    ? (data: unknown) => z.infer<TBody>
-    : (data: unknown) => unknown;
-  
-  /**
-   * Parse and validate query params.
-   * @throws ZodError if validation fails
-   */
-  query: TQuery extends z.ZodType
-    ? (data: unknown) => z.infer<TQuery>
-    : (data: unknown) => Record<string, string>;
-  
-  /**
-   * Type-check response (validates in dev mode).
-   */
-  response: TResponse extends z.ZodType
-    ? (data: z.infer<TResponse>) => z.infer<TResponse>
-    : <T>(data: T) => T;
 }
 
 /**
- * Fluent builder for route definitions.
+ * Route builder with fluent API
  */
 export interface RouteBuilder<
   TMethod extends HttpMethod = HttpMethod,
   TPath extends string = string,
-  TParams extends z.ZodType | undefined = undefined,
-  TBody extends z.ZodType | undefined = undefined,
-  TQuery extends z.ZodType | undefined = undefined,
-  TResponse extends z.ZodType | undefined = undefined
-> extends RouteDefinition<TMethod, TPath, TParams, TBody, TQuery, TResponse> {
-  /** Define URL params schema */
-  withParams<T extends z.ZodType>(schema: T): RouteBuilder<TMethod, TPath, T, TBody, TQuery, TResponse>;
+  TParams = never,
+  TBody = never,
+  TQuery = never,
+  TResponse = never
+> {
+  /** HTTP method */
+  readonly method: TMethod;
+  /** URL path pattern */
+  readonly path: TPath;
+
+  /** Define URL params type */
+  params<T>(): RouteBuilder<TMethod, TPath, T, TBody, TQuery, TResponse>;
   
-  /** Define request body schema */
-  withBody<T extends z.ZodType>(schema: T): RouteBuilder<TMethod, TPath, TParams, T, TQuery, TResponse>;
+  /** Define request body type */
+  body<T>(): RouteBuilder<TMethod, TPath, TParams, T, TQuery, TResponse>;
   
-  /** Define query params schema */
-  withQuery<T extends z.ZodType>(schema: T): RouteBuilder<TMethod, TPath, TParams, TBody, T, TResponse>;
+  /** Define query params type */
+  query<T>(): RouteBuilder<TMethod, TPath, TParams, TBody, T, TResponse>;
   
-  /** Define response schema */
-  returns<T extends z.ZodType>(schema: T): RouteBuilder<TMethod, TPath, TParams, TBody, TQuery, T>;
+  /** Define response type and finalize route */
+  returns<T>(): RouteDefinition<TMethod, TPath, TParams, TBody, TQuery, T>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 📝 ROUTE REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Route info for registry (runtime-safe, no type info) */
+export interface RegisteredRoute {
+  method: HttpMethod;
+  path: string;
+  hasParams: boolean;
+  hasBody: boolean;
+  hasQuery: boolean;
+  hasResponse: boolean;
+}
+
 /** All registered routes for TypeOwl to collect */
-const routeRegistry: RouteDefinition[] = [];
+const routeRegistry: RegisteredRoute[] = [];
 
 /** Get all registered routes */
-export function getRegisteredRoutes(): RouteDefinition[] {
+export function getRegisteredRoutes(): RegisteredRoute[] {
   return [...routeRegistry];
 }
 
@@ -125,75 +112,73 @@ export function clearRouteRegistry(): void {
 // 🏗️ IMPLEMENTATION
 // ═══════════════════════════════════════════════════════════════════════════
 
+interface BuilderState {
+  method: HttpMethod;
+  path: string;
+  hasParams: boolean;
+  hasBody: boolean;
+  hasQuery: boolean;
+}
+
 /**
- * Create a route builder for a specific HTTP method.
+ * Create a route builder for a specific HTTP method
  */
 function createRouteBuilder<TMethod extends HttpMethod>(method: TMethod) {
   return function <TPath extends string>(path: TPath): RouteBuilder<TMethod, TPath> {
-    // Store schemas
-    let paramsSchema: z.ZodType | undefined;
-    let bodySchema: z.ZodType | undefined;
-    let querySchema: z.ZodType | undefined;
-    let responseSchema: z.ZodType | undefined;
-    
-    // Create parser function
-    const createParser = (getSchema: () => z.ZodType | undefined, fallback: unknown) => {
-      return (data: unknown) => {
-        const schema = getSchema();
-        if (schema) {
-          return schema.parse(data);  // Throws ZodError if invalid
-        }
-        return fallback ?? data;
-      };
-    };
-    
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const builder: any = {
+    const state: BuilderState = {
       method,
       path,
-      
-      get schemas() {
-        return {
-          params: paramsSchema,
-          body: bodySchema,
-          query: querySchema,
-          response: responseSchema,
+      hasParams: false,
+      hasBody: false,
+      hasQuery: false,
+    };
+
+    const builder: RouteBuilder<TMethod, TPath> = {
+      method,
+      path,
+
+      params<T>() {
+        state.hasParams = true;
+        return this as unknown as RouteBuilder<TMethod, TPath, T, never, never, never>;
+      },
+
+      body<T>() {
+        state.hasBody = true;
+        return this as unknown as RouteBuilder<TMethod, TPath, never, T, never, never>;
+      },
+
+      query<T>() {
+        state.hasQuery = true;
+        return this as unknown as RouteBuilder<TMethod, TPath, never, never, T, never>;
+      },
+
+      returns<T>() {
+        // Register route when finalized
+        routeRegistry.push({
+          method: state.method,
+          path: state.path,
+          hasParams: state.hasParams,
+          hasBody: state.hasBody,
+          hasQuery: state.hasQuery,
+          hasResponse: true,
+        });
+
+        // Return the finalized route definition
+        const definition: RouteDefinition<TMethod, TPath, never, never, never, T> = {
+          method: state.method as TMethod,
+          path: state.path as TPath,
+          _types: {
+            params: undefined as never,
+            body: undefined as never,
+            query: undefined as never,
+            response: undefined as unknown as T,
+          },
         };
-      },
-      
-      // Parser functions - validate with Zod
-      params: createParser(() => paramsSchema, {}),
-      body: createParser(() => bodySchema, undefined),
-      query: createParser(() => querySchema, {}),
-      response(data: unknown) {
-        // In dev mode, validate response too
-        if (responseSchema && process.env.NODE_ENV !== 'production') {
-          return responseSchema.parse(data);
-        }
-        return data;
-      },
-      
-      // Builder methods (with- prefix to avoid name collision)
-      withParams<T extends z.ZodType>(schema: T) {
-        paramsSchema = schema;
-        return this;
-      },
-      withBody<T extends z.ZodType>(schema: T) {
-        bodySchema = schema;
-        return this;
-      },
-      withQuery<T extends z.ZodType>(schema: T) {
-        querySchema = schema;
-        return this;
-      },
-      returns<T extends z.ZodType>(schema: T) {
-        responseSchema = schema;
-        // Register route when .returns() is called (route is complete)
-        routeRegistry.push(this);
-        return this;
+
+        return definition;
       },
     };
-    
+
     return builder;
   };
 }
@@ -203,18 +188,25 @@ function createRouteBuilder<TMethod extends HttpMethod>(method: TMethod) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Framework-agnostic route builder with Zod validation.
+ * Framework-agnostic route builder with pure TypeScript types.
+ * TypeOwl extracts types at build time - no runtime schema needed!
  * 
  * @example
  * import { route } from 'typeowl/server';
- * import { z } from 'zod';
  * 
- * const BlogSchema = z.object({ id: z.string(), title: z.string() });
+ * interface User { id: string; name: string; role: 'admin' | 'user'; }
+ * interface IdParams { id: string; }
  * 
- * const getBlogs = route.get('/api/blogs').returns(z.array(BlogSchema));
+ * const getUserById = route
+ *   .get('/api/users/:id')
+ *   .params<IdParams>()
+ *   .returns<User | null>();
  * 
  * // Wire up with your framework
- * app.get(getBlogs.path, async () => getBlogs.response(blogs));
+ * app.get(getUserById.path, async (request) => {
+ *   const { id } = request.params as IdParams;
+ *   return user;
+ * });
  */
 export const route = {
   get: createRouteBuilder('GET'),

@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 
 // 🦉 Import types from TypeOwl
 import type { 
-  Blog,                           // 🟡 Static type from src/types/
-  GetApiUsersResponse,            // 🟢 Array type from typeowl.endpoint()
-  Product,
+  Blog,       // Domain type from content.d.ts
+  User,       // Domain type from content.d.ts  
+  Product,    // Domain type from content.d.ts
 } from 'typeowl/types';
 
 // API client with 3 fetch methods
@@ -14,7 +14,7 @@ import { api, rawFetch, typedFetch, type HealthResponse } from './api';
 import { UserCard, BlogCard, ProductCard, HealthStatus, Section } from './components';
 
 export default function App() {
-  const [users, setUsers] = useState<GetApiUsersResponse>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [health, setHealth] = useState<HealthResponse | null>(null);

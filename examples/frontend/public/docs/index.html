@@ -490,8 +490,7 @@
           <li><a href="#server-config">Server Config</a></li>
           <li><a href="#route-api">route.get() <i class="fa-solid fa-star" style="color: var(--accent);"></i></a></li>
           <li><a href="#type-extraction">Type Extraction</a></li>
-          <li><a href="#endpoints">typeowl.endpoint()</a></li>
-          <li><a href="#zod-validation">Zod Validation</a></li>
+          <li><a href="#conflict-resolution">Conflict Resolution</a></li>
           <li><a href="#static-only">Static Only</a></li>
         </ul>
       </div>
@@ -531,15 +530,12 @@
           <span class="filename">terminal</span>
           <button class="copy-btn" onclick="navigator.clipboard.writeText('npm install typeowl')">Copy</button>
         </div>
-        <div class="code-content">npm install typeowl
-
-<span class="comment"># Required for route.get() and typeowl.endpoint() validation</span>
-npm install zod</div>
+        <div class="code-content">npm install typeowl</div>
       </div>
 
       <div class="callout callout-info">
-        <strong><i class="fa-solid fa-lightbulb"></i> Zod is required for the recommended approach</strong>
-        The recommended <code>route.get()</code> API uses Zod schemas for validation and type inference. Static type extraction (Option 2) works without Zod.
+        <strong><i class="fa-solid fa-lightbulb"></i> Pure TypeScript — no schemas required!</strong>
+        TypeOwl uses the TypeScript Compiler API (TypeChecker) for robust type extraction. Define types with regular interfaces and type aliases.
       </div>
 
       <h2 id="quick-start">Quick Start</h2>
@@ -554,19 +550,10 @@ npm install zod</div>
 
 <span class="keyword">export default</span> <span class="function">defineServerConfig</span>({
   version: <span class="string">'1.0.0'</span>,
-  typeSources: <span class="string">'./src/types/'</span>,
-  
-  extract: {
-    content: {
-      from: <span class="string">'./src/types/'</span>,
-      types: <span class="string">'*'</span>,  <span class="comment">// Extract all types</span>
-    },
-  },
-  
+  typeSources: <span class="string">'./src/types/'</span>,      <span class="comment">// Type files to extract</span>
+  routes: <span class="string">'./src/server.ts'</span>,        <span class="comment">// Route files to scan</span>
+  <span class="comment">// onConflict: 'rename',          // Auto-rename duplicates: User -> User1</span>
   mode: <span class="string">'dynamic'</span>,
-  registerRoutes: (app, typeowl) => {
-    <span class="comment">// Your route registration...</span>
-  },
 });</div>
       </div>
 
@@ -626,9 +613,8 @@ npx typeowl watch -i 30</div>
             <li>
               <span class="folder">.typeowl/</span> <span class="desc">Generated types (commit for independent deploys!)</span>
               <ul>
-                <li><span class="file">index.d.ts</span></li>
-                <li><span class="file">content.d.ts</span></li>
-                <li><span class="file">endpoints.d.ts</span></li>
+                <li><span class="file">index.d.ts</span> <span class="desc">ApiEndpoints + re-exports</span></li>
+                <li><span class="file">content.d.ts</span> <span class="desc">All extracted types</span></li>
               </ul>
             </li>
             <li>
@@ -674,12 +660,17 @@ npx typeowl watch -i 30</div>
           <tr>
             <td><code>typeSources</code></td>
             <td>string | string[]</td>
-            <td>Allowed paths for type extraction (security)</td>
+            <td>Source files for type extraction (TypeChecker scans these)</td>
           </tr>
           <tr>
-            <td><code>extract</code></td>
-            <td>object</td>
-            <td>Type extraction configuration per domain</td>
+            <td><code>routes</code></td>
+            <td>string | string[]</td>
+            <td>Route files to scan for <code>route.get().returns&lt;T&gt;()</code> patterns</td>
+          </tr>
+          <tr>
+            <td><code>onConflict</code></td>
+            <td>'error' | 'rename'</td>
+            <td>How to handle duplicate type names (default: 'error')</td>
           </tr>
           <tr>
             <td><code>mode</code></td>
@@ -715,85 +706,68 @@ npx typeowl watch -i 30</div>
 }</div>
       </div>
 
-      <h2 id="route-api">route.get() — Multi-Framework <i class="fa-solid fa-star" style="color: var(--accent);"></i></h2>
+      <h2 id="route-api">route.get() — Pure TypeScript <i class="fa-solid fa-star" style="color: var(--accent);"></i></h2>
       <p>The <strong>recommended</strong> way to define API types. Works with Fastify, Express, Hono, Next.js, and Koa:</p>
 
       <div class="code-block">
         <div class="code-header">
           <span class="filename">server.ts</span>
         </div>
-        <div class="code-content"><span class="keyword">import</span> { z } <span class="keyword">from</span> <span class="string">'zod'</span>;
-<span class="keyword">import</span> { route } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
+        <div class="code-content"><span class="keyword">import</span> { route } <span class="keyword">from</span> <span class="string">'typeowl/server'</span>;
 
-<span class="comment">// Define routes (framework-agnostic!)</span>
-<span class="keyword">const</span> getUsers = route.<span class="function">get</span>(<span class="string">'/api/users'</span>)
-  .<span class="function">returns</span>(z.<span class="function">array</span>(UserSchema));
+<span class="comment">// Define types with regular TypeScript</span>
+<span class="keyword">interface</span> <span class="type">User</span> { id: <span class="type">string</span>; name: <span class="type">string</span>; email: <span class="type">string</span>; }
+<span class="keyword">interface</span> <span class="type">IdParams</span> { id: <span class="type">string</span>; }
+<span class="keyword">interface</span> <span class="type">CreateUserInput</span> { name: <span class="type">string</span>; email: <span class="type">string</span>; }
 
-<span class="keyword">const</span> createUser = route.<span class="function">post</span>(<span class="string">'/api/users'</span>)
-  .<span class="function">withBody</span>(CreateUserSchema)
-  .<span class="function">returns</span>(UserSchema);
+<span class="comment">// Define routes with type parameters</span>
+<span class="keyword">const</span> getUsers = route.<span class="function">get</span>(<span class="string">'/api/users'</span>).<span class="function">returns</span>&lt;<span class="type">User</span>[]&gt;();
+<span class="keyword">const</span> getUserById = route.<span class="function">get</span>(<span class="string">'/api/users/:id'</span>).<span class="function">params</span>&lt;<span class="type">IdParams</span>&gt;().<span class="function">returns</span>&lt;<span class="type">User</span> | <span class="keyword">null</span>&gt;();
+<span class="keyword">const</span> createUser = route.<span class="function">post</span>(<span class="string">'/api/users'</span>).<span class="function">body</span>&lt;<span class="type">CreateUserInput</span>&gt;().<span class="function">returns</span>&lt;<span class="type">User</span>&gt;();
 
-<span class="comment">// Wire up with your framework (Fastify, Express, Hono, Next.js, Koa)</span>
-app.<span class="function">get</span>(getUsers.path, <span class="keyword">async</span> () => {
-  <span class="keyword">return</span> getUsers.<span class="function">response</span>(users);
-});
-
-app.<span class="function">post</span>(createUser.path, <span class="keyword">async</span> (request, reply) => {
-  <span class="keyword">const</span> input = createUser.<span class="function">body</span>(request.body);  <span class="comment">// Validates with Zod!</span>
-  <span class="keyword">return</span> createUser.<span class="function">response</span>(newUser);
-});</div>
+<span class="comment">// Wire up with your framework</span>
+app.<span class="function">get</span>(getUsers.path, <span class="keyword">async</span> () => users);
+app.<span class="function">get</span>(getUserById.path, <span class="keyword">async</span> (req) => findUser(req.params.id));
+app.<span class="function">post</span>(createUser.path, <span class="keyword">async</span> (req) => createNewUser(req.body));</div>
       </div>
 
       <div class="callout callout-success">
         <strong><i class="fa-solid fa-check-circle"></i> Why route.get() is recommended:</strong>
         <ul style="margin-top: 0.5rem; padding-left: 1.25rem;">
+          <li>Pure TypeScript — no schemas, just interfaces and types</li>
+          <li>TypeChecker extraction — robust type resolution</li>
           <li>Multi-framework — works with Fastify, Express, Hono, Next.js, Koa</li>
-          <li>Zod validation — validates params, body, query, and response</li>
-          <li>Type inference — full TypeScript support with autocomplete</li>
-          <li>Reusable — define once, wire up with your framework</li>
+          <li>Conflict resolution — handles duplicate types with onConflict config</li>
         </ul>
       </div>
 
-      <h2 id="endpoints">typeowl.endpoint() — Framework-Specific</h2>
-      <p>Alternative approach that passes the app instance directly:</p>
+      <h2 id="conflict-resolution">Conflict Resolution</h2>
+      <p>When multiple files define types with the same name, TypeOwl uses <strong>structural comparison</strong>:</p>
+
+      <ul>
+        <li><strong>Same structure</strong> — Types are merged silently (no conflict)</li>
+        <li><strong>Different structure</strong> — Handled based on <code>onConflict</code> config</li>
+      </ul>
 
       <div class="code-block">
         <div class="code-header">
-          <span class="filename">server.ts</span>
+          <span class="filename">typeowl.server.config.ts</span>
         </div>
-        <div class="code-content"><span class="comment">// With Zod schemas (runtime validation)</span>
-typeowl.<span class="function">endpoint</span>(app, <span class="string">'POST'</span>, <span class="string">'/api/users'</span>, {
-  body: CreateUserSchema,
-  response: UserSchema,
-}, <span class="keyword">async</span> ({ body }) => {
-  <span class="comment">// body is validated and typed!</span>
-  <span class="keyword">return</span> createUser(body);
-});
-
-<span class="comment">// With type references (no Zod needed)</span>
-typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</span>, <span class="string">'/api/products'</span>, {
-  response: <span class="string">'Product[]'</span>,  <span class="comment">// References extracted type</span>
-}, <span class="keyword">async</span> () => products);</div>
+        <div class="code-content"><span class="keyword">export default</span> <span class="function">defineServerConfig</span>({
+  <span class="comment">// How to handle duplicate type names with different structures</span>
+  onConflict: <span class="string">'error'</span>,   <span class="comment">// Default: throw error with suggestion</span>
+  <span class="comment">// onConflict: 'rename', // Auto-rename: User -> User1 -> User2</span>
+});</div>
       </div>
 
-      <h2 id="zod-validation">Zod Validation</h2>
-      <p>When you provide Zod schemas, TypeOwl automatically validates requests:</p>
-
-      <ul>
-        <li><strong>body</strong> — Validated before handler runs</li>
-        <li><strong>params</strong> — URL parameters validated</li>
-        <li><strong>query</strong> — Query string validated</li>
-        <li><strong>response</strong> — Validated in development mode</li>
-      </ul>
-
-      <div class="callout callout-success">
-        <strong><i class="fa-solid fa-check"></i> Best Practice</strong>
-        Use Zod for body/params validation, and type references for responses. This gives you validation where it matters most (user input) without runtime overhead for responses.
+      <div class="callout callout-info">
+        <strong><i class="fa-solid fa-lightbulb"></i> Structural Comparison</strong>
+        TypeOwl uses the TypeScript Compiler API to compare types by structure, not by name or source location. Two interfaces with identical properties are considered the same type.
       </div>
 
-      <h2 id="static-only">Static Extraction Only (No Endpoints)</h2>
+      <h2 id="static-only">Static Extraction Only (No Routes)</h2>
       <p>
-        Don't need API contracts or validation? You can use TypeOwl purely for <strong>type sharing</strong> — 
+        Don't need API endpoint mapping? You can use TypeOwl purely for <strong>type sharing</strong> — 
         just extract types from your backend files and sync them to the frontend. No copy/paste needed.
       </p>
 
@@ -801,8 +775,8 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</
         <strong><i class="fa-solid fa-lightbulb"></i> When to use static-only:</strong>
         <ul style="margin-top: 0.5rem; padding-left: 1.25rem;">
           <li>You just want to stop copy/pasting types between repos</li>
-          <li>You don't need API endpoint mapping or validation</li>
-          <li>You want the simplest possible setup (no Zod required)</li>
+          <li>You don't need API endpoint mapping</li>
+          <li>You want the simplest possible setup</li>
         </ul>
       </div>
 
@@ -814,12 +788,8 @@ typeowl.<span class="function">endpoint</span>(app, <span class="string">'GET'</
         </div>
         <div class="code-content"><span class="keyword">export default</span> <span class="function">defineServerConfig</span>({
   version: <span class="string">'1.0.0'</span>,
-  typeSources: <span class="string">'./src/types/'</span>,
-  
-  <span class="comment">// Just extract types — no endpoints needed!</span>
-  extract: {
-    content: { from: <span class="string">'./src/types/'</span>, types: <span class="string">'*'</span> },
-  },
+  typeSources: <span class="string">'./src/types/'</span>,  <span class="comment">// TypeChecker extracts all exported types</span>
+  mode: <span class="string">'dynamic'</span>,
 });</div>
       </div>
 

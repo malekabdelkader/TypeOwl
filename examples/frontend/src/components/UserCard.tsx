@@ -1,10 +1,12 @@
-import type { GetApiUsersByIdResponse as User } from 'typeowl/types';
+import type { User } from 'typeowl/types';
 
-const roleColors = {
+const roleColors: Record<string, string> = {
   admin: '#f59e0b',
   user: '#22c55e', 
   guest: '#6b7280',
 };
+
+const getRoleColor = (role?: string) => roleColors[role ?? 'guest'] ?? '#6b7280';
 
 export function UserCard({ user }: { user: User }) {
   return (
@@ -19,7 +21,7 @@ export function UserCard({ user }: { user: User }) {
           width: 40,
           height: 40,
           borderRadius: '50%',
-          background: `linear-gradient(135deg, ${roleColors[user.role]}, ${roleColors[user.role]}88)`,
+          background: `linear-gradient(135deg, ${getRoleColor(user.role)}, ${getRoleColor(user.role)}88)`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -38,8 +40,8 @@ export function UserCard({ user }: { user: User }) {
         fontSize: '0.75rem', 
         padding: '0.25rem 0.5rem',
         borderRadius: '4px',
-        background: `${roleColors[user.role]}22`,
-        color: roleColors[user.role],
+        background: `${getRoleColor(user.role)}22`,
+        color: getRoleColor(user.role),
         fontWeight: 500,
         textTransform: 'uppercase',
         letterSpacing: '0.05em',
